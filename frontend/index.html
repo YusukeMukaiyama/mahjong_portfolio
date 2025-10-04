@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>対局管理</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css" />
   <script defer src="app.js"></script>
-  </head>
+</head>
 <body>
   <header class="header">
     <div class="header-inner">
@@ -37,7 +37,8 @@
               <option value="custom">カスタム</option>
             </select>
           </div>
-          <div class="field" id="oka_custom_wrap" style="display:none;"><label>オカ（カスタム：100点単位、0〜100000）</label>
+          <div class="field" id="oka_custom_wrap" style="display:none;">
+            <label>オカ（カスタム：100点単位、0〜100000）</label>
             <input class="input" id="oka_custom" type="number" placeholder="例: 30000" min="0" max="100000" step="100" />
           </div>
           <div class="field"><label>ウマ（順位点）</label>
@@ -49,24 +50,19 @@
               <option value="custom">カスタム</option>
             </select>
           </div>
-          <div class="field" id="uma_custom_wrap" style="display:none;"><label>ウマ（カスタム：自然数-自然数、例: 5-15）</label>
+          <div class="field" id="uma_custom_wrap" style="display:none;">
+            <label>ウマ（カスタム：自然数-自然数、例: 5-15）</label>
             <input class="input" id="uma_custom" type="text" placeholder="5-15" />
           </div>
         </div>
+
         <div class="grid grid-4" style="margin-top:12px;">
-          <div class="field"><label>参加者1</label>
-            <input class="input" id="p1" type="text" placeholder="名前1" />
-          </div>
-          <div class="field"><label>参加者2</label>
-            <input class="input" id="p2" type="text" placeholder="名前2" />
-          </div>
-          <div class="field"><label>参加者3</label>
-            <input class="input" id="p3" type="text" placeholder="名前3" />
-          </div>
-          <div class="field"><label>参加者4</label>
-            <input class="input" id="p4" type="text" placeholder="名前4" />
-          </div>
+          <div class="field"><label>参加者1</label><input class="input" id="p1" type="text" placeholder="名前1" /></div>
+          <div class="field"><label>参加者2</label><input class="input" id="p2" type="text" placeholder="名前2" /></div>
+          <div class="field"><label>参加者3</label><input class="input" id="p3" type="text" placeholder="名前3" /></div>
+          <div class="field"><label>参加者4</label><input class="input" id="p4" type="text" placeholder="名前4" /></div>
         </div>
+
         <div style="margin-top:14px; display:flex; gap:10px;">
           <button class="btn btn-primary" id="createBtn">作成</button>
         </div>
@@ -89,6 +85,7 @@
             <button class="btn" id="backBtn">← 一覧へ戻る</button>
           </div>
         </div>
+
         <div id="detailError" class="error" style="margin-top:10px;"></div>
         <div class="kpi" style="margin-top:10px;">
           <span class="pill">起点: <strong id="detailStart"></strong></span>
@@ -97,10 +94,38 @@
         </div>
 
         <div style="margin-top:16px; display:grid; gap:16px;">
+          <!-- スコア入力 -->
           <div>
-            <h3 class="subtitle">参加者（座席順）</h3>
-            <ul id="detailParticipants" class="list"></ul>
+            <h3 class="subtitle">スコア入力（東・南・西・北の名前は同点用のメモ）</h3>
+            <div id="detailScoreError" class="error"></div>
+            <div class="grid grid-4" style="margin-top:8px;">
+              <div class="field">
+                <label>東の名前</label>
+                <input class="input" id="seat0name" type="text" placeholder="（例）Aさん" />
+                <input class="input" id="seat0" type="number" placeholder="スコア（例: 25000）" />
+              </div>
+              <div class="field">
+                <label>南の名前</label>
+                <input class="input" id="seat1name" type="text" placeholder="（例）Bさん" />
+                <input class="input" id="seat1" type="number" placeholder="スコア" />
+              </div>
+              <div class="field">
+                <label>西の名前</label>
+                <input class="input" id="seat2name" type="text" placeholder="（例）Cさん" />
+                <input class="input" id="seat2" type="number" placeholder="スコア" />
+              </div>
+              <div class="field">
+                <label>北の名前</label>
+                <input class="input" id="seat3name" type="text" placeholder="（例）Dさん" />
+                <input class="input" id="seat3" type="number" placeholder="スコア" />
+              </div>
+            </div>
+            <div style="margin-top:12px;">
+              <button class="btn btn-primary" id="saveGameBtn">登録</button>
+            </div>
           </div>
+
+          <!-- 累計順位 -->
           <div>
             <h3 class="subtitle">累計順位</h3>
             <div class="w-full" style="overflow:hidden;">
@@ -112,27 +137,8 @@
               </table>
             </div>
           </div>
-          <div>
-            <h3 class="subtitle">スコア入力</h3>
-            <div id="detailScoreError" class="error"></div>
-            <div class="grid grid-4" style="margin-top:8px;">
-              <div class="field"><label id="seat0label">Seat 0</label>
-                <input class="input" id="seat0" type="number" placeholder="25000" />
-              </div>
-              <div class="field"><label id="seat1label">Seat 1</label>
-                <input class="input" id="seat1" type="number" placeholder="25000" />
-              </div>
-              <div class="field"><label id="seat2label">Seat 2</label>
-                <input class="input" id="seat2" type="number" placeholder="25000" />
-              </div>
-              <div class="field"><label id="seat3label">Seat 3</label>
-                <input class="input" id="seat3" type="number" placeholder="25000" />
-              </div>
-            </div>
-            <div style="margin-top:12px;">
-              <button class="btn btn-primary" id="saveGameBtn">登録</button>
-            </div>
-          </div>
+
+          <!-- 過去の履歴 -->
           <div>
             <h3 class="subtitle">過去の履歴</h3>
             <div id="detailGames">
@@ -155,9 +161,19 @@
               </div>
             </div>
           </div>
+
+          <!-- 推移グラフ -->
+          <div>
+            <h3 class="subtitle">累計pt 推移</h3>
+            <div id="trendContainer" style="width:100%; overflow:hidden;">
+              <canvas id="trendCanvas" width="900" height="320" role="img" aria-label="累計ptの推移グラフ"></canvas>
+            </div>
+            <div id="trendLegend" class="legend" style="display:flex; gap:12px; flex-wrap:wrap; margin-top:8px;"></div>
+          </div>
         </div>
       </div>
     </section>
+
     <div class="footer-space"></div>
   </main>
 </body>
