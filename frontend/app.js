@@ -292,7 +292,18 @@ async function loadMatchDetail(id) {
   showDetailError("");
   $("detailTitle").textContent = "対局詳細";
   $("detailParticipants").innerHTML = "";
-  $("detailGames").textContent = "読み込み中...";
+  // preserve game history DOM; put a lightweight loader inside the table if present
+  const tabsEl = $("gameTabs");
+  const bodyEl = $("gameTableBody");
+  if (tabsEl) tabsEl.innerHTML = '';
+  if (bodyEl) {
+    bodyEl.innerHTML = '';
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 4; td.textContent = '読み込み中...';
+    tr.appendChild(td);
+    bodyEl.appendChild(tr);
+  }
 
   try {
     const res = await fetch(`${API_BASE}/${encodeURIComponent(id)}`, { method: "GET" });
@@ -310,6 +321,7 @@ async function loadMatchDetail(id) {
 
 let currentMatchId = null;
 let currentParticipants = [];
+let currentActiveGameNumber = null;
 
 function renderDetail(m) {
   currentMatchId = m.id;
@@ -345,42 +357,113 @@ function renderDetail(m) {
 }
 
 function renderGames(m) {
-  const container = $("detailGames");
-  container.innerHTML = "";
-  const games = m.games || [];
+  const holder = $("detailGames");
+  let tabs = $("gameTabs");
+  let tbody = $("gameTableBody");
+  if (!holder) return;
+  // Rebuild structure if missing (e.g., DOM replaced earlier)
+  if (!tabs || !tbody) {
+    holder.innerHTML = '';
+    const tabsDiv = document.createElement('div');
+    tabsDiv.id = 'gameTabs';
+    tabsDiv.className = 'tabs';
+    tabsDiv.setAttribute('role','tablist');
+    tabsDiv.setAttribute('aria-label','ゲーム切替');
+    const wrap = document.createElement('div');
+    wrap.className = 'w-full max-w-full min-w-0';
+    const table = document.createElement('table');
+    table.className = 'table-clean table-edit';
+    table.style.width = '100%';
+    table.style.borderCollapse = 'collapse';
+    const thead = document.createElement('thead');
+    const trh = document.createElement('tr');
+    ['順位','名前','点数（編集可）','合計PT'].forEach(t=>{ const th=document.createElement('th'); th.textContent=t; trh.appendChild(th); });
+    thead.appendChild(trh);
+    const tbodyEl = document.createElement('tbody');
+    tbodyEl.id = 'gameTableBody';
+    table.appendChild(thead); table.appendChild(tbodyEl);
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex; justify-content:flex-end; margin-top:10px;';
+    const btn = document.createElement('button');
+    btn.id = 'saveGameEditBtn'; btn.className = 'btn btn-primary'; btn.textContent = 'このゲームの点数を保存';
+    actions.appendChild(btn);
+    holder.appendChild(tabsDiv);
+    holder.appendChild(wrap);
+    wrap.appendChild(table);
+    wrap.appendChild(actions);
+    tabs = tabsDiv; tbody = tbodyEl;
+    btn.addEventListener('click', saveEditedGame);
+  }
+  tabs.innerHTML = '';
+  tbody.innerHTML = '';
+  const games = Array.isArray(m.games) ? m.games : [];
   if (!games.length) {
-    const empty = document.createElement('div');
-    empty.className = 'empty-state';
-    empty.textContent = 'ゲームはまだ登録されていません。下のフォームから登録しましょう。';
-    container.appendChild(empty);
+    const tr = document.createElement('tr');
+    const td = document.createElement('td'); td.colSpan = 4; td.textContent = 'ゲームはまだ登録されていません。上のフォームから登録しましょう。';
+    tr.appendChild(td); tbody.appendChild(tr);
     return;
   }
-  games.forEach((g) => {
-    const wrap = document.createElement("div");
-    wrap.className = "game-card";
-    const title = document.createElement("h4");
-    title.textContent = `Game ${g.number}`;
-    wrap.appendChild(title);
-    const resultsBox = document.createElement("div");
-    resultsBox.className = "results";
-    (g.results || []).sort((a,b)=> a.seat_index - b.seat_index).forEach((r) => {
-      const row = document.createElement("div");
-      row.className = "result-row";
-      const name = currentParticipants.find(p => p.seat_priority === r.seat_index)?.name || `Seat ${r.seat_index}`;
-      row.innerHTML = `
-        <strong>${name}</strong>
-        <span>順位 ${r.rank}</span>
-        <span>raw ${r.raw_score}</span>
-        <span>soten ${r.pt_soten.toFixed(1)}</span>
-        <span>uma ${r.pt_uma.toFixed(1)}</span>
-        <span>oka ${r.pt_oka_bonus.toFixed(1)}</span>
-        <span>total ${r.pt_total.toFixed(1)}</span>
-      `;
-      resultsBox.appendChild(row);
+
+  const gameByNo = new Map();
+  games.forEach(g => gameByNo.set(g.number, g));
+  if (!currentActiveGameNumber || !gameByNo.has(currentActiveGameNumber)) {
+    currentActiveGameNumber = games[0].number;
+  }
+
+  // Build tabs
+  games.forEach(g => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'tab' + (g.number === currentActiveGameNumber ? ' tab-active' : '');
+    btn.setAttribute('role', 'tab');
+    btn.setAttribute('aria-selected', g.number === currentActiveGameNumber ? 'true' : 'false');
+    btn.textContent = `Game ${g.number}`;
+    btn.addEventListener('click', () => {
+      currentActiveGameNumber = g.number;
+      renderGames(m);
     });
-    wrap.appendChild(resultsBox);
-    container.appendChild(wrap);
+    tabs.appendChild(btn);
   });
+
+  // Render table rows for active game
+  const g = gameByNo.get(currentActiveGameNumber);
+  const rows = (g.results || []).slice().sort((a,b)=> a.seat_index - b.seat_index);
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    const tdRank = document.createElement('td'); tdRank.textContent = String(r.rank);
+    const name = currentParticipants.find(p => p.seat_priority === r.seat_index)?.name || `Seat ${r.seat_index}`;
+    const tdName = document.createElement('td'); tdName.textContent = name;
+    const tdScore = document.createElement('td');
+    const inp = document.createElement('input');
+    inp.type = 'number'; inp.step = '100'; inp.value = String(r.raw_score);
+    inp.id = `editScore-${r.seat_index}`;
+    tdScore.appendChild(inp);
+    const tdTotal = document.createElement('td'); tdTotal.textContent = r.pt_total.toFixed(1);
+    tr.appendChild(tdRank); tr.appendChild(tdName); tr.appendChild(tdScore); tr.appendChild(tdTotal);
+    tbody.appendChild(tr);
+  });
+}
+
+function saveEditedGame() {
+  const errBox = $("detailScoreError");
+  if (errBox) { errBox.style.display = 'none'; errBox.textContent = ''; }
+  if (!currentMatchId || currentActiveGameNumber == null) return;
+  const vals = [0,1,2,3].map(i => Number((document.getElementById(`editScore-${i}`) || {}).value));
+  if (vals.some(v => !Number.isInteger(v))) {
+    showScoreError('整数で入力してください');
+    return;
+  }
+  if (vals.some(v => v % 100 !== 0)) {
+    showScoreError('raw_score は100点単位');
+    return;
+  }
+  const sum = vals.reduce((a,b)=>a+b,0);
+  if (sum !== 100000) {
+    showScoreError('合計は100000点にしてください');
+    return;
+  }
+  // 現時点では更新API未実装のため、保存処理はスタブ
+  showToast(`Game ${currentActiveGameNumber} の点数を検証しました（保存API未実装）`);
 }
 
 function renderTotals(m) {
@@ -461,6 +544,8 @@ window.addEventListener("DOMContentLoaded", () => {
   $("backBtn").addEventListener("click", (e) => { e.preventDefault(); go("/"); });
   window.addEventListener("popstate", route);
   $("saveGameBtn").addEventListener("click", submitScores);
+  const saveEditBtn = $("saveGameEditBtn");
+  if (saveEditBtn) saveEditBtn.addEventListener('click', saveEditedGame);
   // Theme toggle
   const themeBtn = $("themeToggle");
   if (themeBtn) {

@@ -204,6 +204,13 @@ input[type=number] { -moz-appearance: textfield; }
 .alert { padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid rgba(255,93,110,.35); background: linear-gradient(180deg, rgba(255,93,110,.18), rgba(255,93,110,.08)); color: #fff; }
 .alert-error { border-color: rgba(255,93,110,.45); }
 
+/* Tabs for game history */
+.tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--border); margin-bottom: 10px; flex-wrap: wrap; }
+.tab { appearance: none; border: 1px solid var(--border); background: var(--elev-2); color: var(--text); border-radius: 8px 8px 0 0; padding: 8px 10px; font-size: 13px; cursor: pointer; }
+.tab[aria-selected="true"], .tab.tab-active { background: var(--elev-1); border-bottom-color: var(--elev-1); font-weight: 600; }
+.tab:focus-visible { outline: 3px solid color-mix(in oklab, var(--accent) 40%, transparent); outline-offset: 2px; }
+.table-edit input[type="number"] { width: 100%; max-width: 120px; text-align: right; }
+
 /* Small footer spacing */
 .footer-space { height: 60px; }
 

@@ -134,8 +134,26 @@
             </div>
           </div>
           <div>
-            <h3 class="subtitle">ゲーム結果</h3>
-            <div id="detailGames" class="games meta">ゲーム未登録</div>
+            <h3 class="subtitle">過去の履歴</h3>
+            <div id="detailGames">
+              <div id="gameTabs" class="tabs" role="tablist" aria-label="ゲーム切替"></div>
+              <div class="w-full max-w-full min-w-0">
+                <table class="table-clean table-edit" style="width:100%; border-collapse: collapse;">
+                  <thead class="bg-slate-50 text-slate-600">
+                    <tr>
+                      <th>順位</th>
+                      <th>名前</th>
+                      <th>点数（編集可）</th>
+                      <th>合計PT</th>
+                    </tr>
+                  </thead>
+                  <tbody id="gameTableBody"></tbody>
+                </table>
+                <div style="display:flex; justify-content:flex-end; margin-top:10px;">
+                  <button id="saveGameEditBtn" class="btn btn-primary">このゲームの点数を保存</button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
