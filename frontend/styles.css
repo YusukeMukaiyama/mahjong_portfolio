@@ -102,8 +102,13 @@ body::before {
 .brand-badge {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  border-radius: 8px; /* 角だけ丸い四角 */
+  background-color: color-mix(in oklab, var(--accent) 50%, var(--accent-2) 50%); /* フォールバック */
+  background-image: url('eguchiman.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  border: 1px solid var(--border);
   box-shadow: var(--shadow);
 }
 .brand-title { font-size: 16px; }
