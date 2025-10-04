@@ -521,18 +521,34 @@ function saveEditedGame() {
 function renderTotals(m) {
   const tbody = $("totalsTable");
   tbody.innerHTML = "";
-  const totals = m.cumulative_scores || [];
-  if (!totals.length) {
+  // サーバ計算済みの participant_id ベース (cumulative_scores) を優先
+  const byPid = new Map();
+  const totalsSrv = Array.isArray(m.cumulative_scores) ? m.cumulative_scores : [];
+  totalsSrv.forEach((t) => { if (t && typeof t.participant_id === 'string') byPid.set(t.participant_id, t.total || 0); });
+
+  // Fallback: games[].results[].participant_id から合算
+  if (byPid.size === 0) {
+    const games = Array.isArray(m.games) ? m.games : [];
+    games.forEach(g => {
+      (g.results || []).forEach((r) => {
+        const pid = r.participant_id;
+        if (pid && typeof r?.pt_total === 'number') byPid.set(pid, (byPid.get(pid) || 0) + r.pt_total);
+      });
+    });
+  }
+
+  if (byPid.size === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td"); td.colSpan = 3; td.textContent = "まだスコアなし";
     tr.appendChild(td); tbody.appendChild(tr);
     return;
   }
-  const rows = totals.map((t) => {
-    const name = currentParticipants.find(p => p.seat_priority === t.seat_index)?.name || `Seat ${t.seat_index}`;
-    return { name, seat_index: t.seat_index, total: t.total };
-  });
-  rows.sort((a, b) => (b.total - a.total) || (a.seat_index - b.seat_index));
+  const rows = (currentParticipants || []).slice().sort((a,b)=>a.seat_priority-b.seat_priority).map(p => ({
+    name: p.name,
+    participant_id: p.id,
+    total: byPid.get(p.id) || 0,
+  }));
+  rows.sort((a, b) => (b.total - a.total));
   rows.forEach((r, i) => {
     const tr = document.createElement("tr");
     const tdRank = document.createElement("td"); tdRank.innerHTML = `<span class="rank-badge">${i+1}</span>`;
@@ -554,6 +570,15 @@ async function submitScores() {
   const namesBySeat = [ $("seat0name").value.trim(), $("seat1name").value.trim(), $("seat2name").value.trim(), $("seat3name").value.trim() ];
   const scores = [0,1,2,3].map(i => Number($(`seat${i}`).value));
 
+  // 参加者ID解決（名前→id）
+  const nameToId = new Map((currentParticipants || []).map(p => [String(p.name), String(p.id)]));
+  const players = [0,1,2,3].map(i => {
+    const nm = namesBySeat[i];
+    const pid = nameToId.get(nm || '') || undefined;
+    return { seat_index: i, participant_id: pid, display_name: nm || undefined, name: nm || undefined };
+  });
+  if (players.some(p => !p.participant_id)) { showScoreError("参加者の選択が不正です"); return; }
+
   // バリデーション（スコア）
   if (scores.some(v => !Number.isInteger(v))) { showScoreError("整数で入力してください"); return; }
   if (scores.some(v => v % 100 !== 0)) { showScoreError("raw_score は100点単位"); return; }
@@ -571,7 +596,8 @@ async function submitScores() {
 
   // 送信用（サーバは seat_index / raw_score のみを使用）
   const payload = {
-    scores: [0,1,2,3].map(i => ({ seat_index: i, raw_score: scores[i] }))
+    scores: [0,1,2,3].map(i => ({ seat_index: i, raw_score: scores[i] })),
+    players
     // namesForSave は送らない（DB保存不要のため）
   };
 
@@ -648,14 +674,20 @@ function drawTrendChartFromGames(m) {
   if (!resized) return;
   const ctx = resized.ctx;
 
-  // 座席ごとの累計（人は固定表示：参加者 seat_priority 順）
-  const namesBySeat = [0,1,2,3].map(i => currentParticipants.find(p => p.seat_priority === i)?.name || `Seat ${i}`);
+  // 参加者IDごとの累計（表示順は participants の seat_priority）
+  const ordered = (currentParticipants || []).slice().sort((a,b)=>a.seat_priority-b.seat_priority);
+  const ids = ordered.map(p=>p.id);
+  const namesById = ordered.map(p=>p.name);
   const totals = [0,0,0,0];
-  const series = [0,1,2,3].map(()=>[]); // 各席の {x: gameNo, y: total}
+  const series = [0,1,2,3].map(()=>[]); // 各人の {x: gameNo, y: total}
+  const seatIndexToOrderedIdx = new Map([0,1,2,3].map(i=>[i, ordered.findIndex(p=>p.seat_priority===i)]));
 
   games.forEach(g => {
     (g.results || []).forEach(r => {
-      totals[r.seat_index] += r.pt_total;
+      const pid = r.participant_id;
+      let idx = pid ? ids.indexOf(pid) : -1;
+      if (idx < 0) idx = seatIndexToOrderedIdx.get(r.seat_index) ?? -1;
+      if (idx >=0 && idx < 4) totals[idx] += r.pt_total;
     });
     const no = g.number;
     [0,1,2,3].forEach(i => series[i].push({ x: no, y: +totals[i] }));
@@ -797,7 +829,7 @@ function drawTrendChartFromGames(m) {
       const item = document.createElement("div"); item.style.display = "flex"; item.style.alignItems = "center"; item.style.gap = "6px";
       const sw = document.createElement("span"); sw.style.display = "inline-block"; sw.style.width = "14px"; sw.style.height = "3px";
       sw.style.background = TREND_COLORS[i % TREND_COLORS.length];
-      const label = document.createElement("span"); label.textContent = namesBySeat[i];
+      const label = document.createElement("span"); label.textContent = namesById[i];
       item.appendChild(sw); item.appendChild(label); legend.appendChild(item);
     });
   }
@@ -806,7 +838,7 @@ function drawTrendChartFromGames(m) {
   try {
     window.__trendGeom = { margin, W, H, minX, maxX, yMin, yMax };
     window.__trendGames = games.map(g => g.number);
-    window.__trendNames = namesBySeat;
+    window.__trendNames = namesById;
     window.__trendSeries = series; // arrays of {x,y}
     window.__lastGames = games.slice();
   } catch {}

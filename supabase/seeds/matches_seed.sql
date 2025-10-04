@@ -8,6 +8,7 @@ truncate table public.game_scores restart identity cascade;
 truncate table public.games restart identity cascade;
 truncate table public.participants restart identity cascade;
 truncate table public.matches restart identity cascade;
+truncate table public.game_seats restart identity cascade;
 
 -- Helper note:
 -- For each match below we generate N games (3..15) and cycle deterministic
@@ -42,6 +43,14 @@ with m as (select id from public.matches where title = 'Pro League 2024 Rd.1'),
 g as (select generate_series(1,7) as number)
 insert into public.games(match_id, number)
 select m.id, g.number from m cross join g;
+
+-- Seat mapping (fixed by participants.seat_priority for seed)
+with m as (select id from public.matches where title = 'Pro League 2024 Rd.1')
+insert into public.game_seats(match_id, game_number, seat_index, participant_id)
+select g.match_id, g.number, p.seat_priority, p.id
+from public.games g
+join m on g.match_id = m.id
+join public.participants p on p.match_id = g.match_id;
 
 with m as (select id from public.matches where title = 'Pro League 2024 Rd.1'),
 g as (select generate_series(1,7) as number),
@@ -81,6 +90,13 @@ g as (select generate_series(1,5) as number)
 insert into public.games(match_id, number)
 select m.id, g.number from m cross join g;
 
+with m as (select id from public.matches where title = 'Tokyo Night League #3')
+insert into public.game_seats(match_id, game_number, seat_index, participant_id)
+select g.match_id, g.number, p.seat_priority, p.id
+from public.games g
+join m on g.match_id = m.id
+join public.participants p on p.match_id = g.match_id;
+
 with m as (select id from public.matches where title = 'Tokyo Night League #3'),
 g as (select generate_series(1,5) as number),
 s as (select 0 as seat_index union all select 1 union all select 2 union all select 3)
@@ -118,6 +134,13 @@ with m as (select id from public.matches where title = 'Classic Cup Vol.7'),
 g as (select generate_series(1,9) as number)
 insert into public.games(match_id, number)
 select m.id, g.number from m cross join g;
+
+with m as (select id from public.matches where title = 'Classic Cup Vol.7')
+insert into public.game_seats(match_id, game_number, seat_index, participant_id)
+select g.match_id, g.number, p.seat_priority, p.id
+from public.games g
+join m on g.match_id = m.id
+join public.participants p on p.match_id = g.match_id;
 
 with m as (select id from public.matches where title = 'Classic Cup Vol.7'),
 g as (select generate_series(1,9) as number),
@@ -157,6 +180,13 @@ g as (select generate_series(1,12) as number)
 insert into public.games(match_id, number)
 select m.id, g.number from m cross join g;
 
+with m as (select id from public.matches where title = 'Weekend Open Finals')
+insert into public.game_seats(match_id, game_number, seat_index, participant_id)
+select g.match_id, g.number, p.seat_priority, p.id
+from public.games g
+join m on g.match_id = m.id
+join public.participants p on p.match_id = g.match_id;
+
 with m as (select id from public.matches where title = 'Weekend Open Finals'),
 g as (select generate_series(1,12) as number),
 s as (select 0 as seat_index union all select 1 union all select 2 union all select 3)
@@ -194,6 +224,13 @@ with m as (select id from public.matches where title = 'Spring Series 2'),
 g as (select generate_series(1,6) as number)
 insert into public.games(match_id, number)
 select m.id, g.number from m cross join g;
+
+with m as (select id from public.matches where title = 'Spring Series 2')
+insert into public.game_seats(match_id, game_number, seat_index, participant_id)
+select g.match_id, g.number, p.seat_priority, p.id
+from public.games g
+join m on g.match_id = m.id
+join public.participants p on p.match_id = g.match_id;
 
 with m as (select id from public.matches where title = 'Spring Series 2'),
 g as (select generate_series(1,6) as number),
@@ -233,6 +270,13 @@ g as (select generate_series(1,15) as number)
 insert into public.games(match_id, number)
 select m.id, g.number from m cross join g;
 
+with m as (select id from public.matches where title = 'City Masters 2024')
+insert into public.game_seats(match_id, game_number, seat_index, participant_id)
+select g.match_id, g.number, p.seat_priority, p.id
+from public.games g
+join m on g.match_id = m.id
+join public.participants p on p.match_id = g.match_id;
+
 with m as (select id from public.matches where title = 'City Masters 2024'),
 g as (select generate_series(1,15) as number),
 s as (select 0 as seat_index union all select 1 union all select 2 union all select 3)
@@ -271,6 +315,13 @@ g as (select generate_series(1,4) as number)
 insert into public.games(match_id, number)
 select m.id, g.number from m cross join g;
 
+with m as (select id from public.matches where title = 'Autumn Cup Group A')
+insert into public.game_seats(match_id, game_number, seat_index, participant_id)
+select g.match_id, g.number, p.seat_priority, p.id
+from public.games g
+join m on g.match_id = m.id
+join public.participants p on p.match_id = g.match_id;
+
 with m as (select id from public.matches where title = 'Autumn Cup Group A'),
 g as (select generate_series(1,4) as number),
 s as (select 0 as seat_index union all select 1 union all select 2 union all select 3)
@@ -308,6 +359,13 @@ with m as (select id from public.matches where title = 'Rookies Clash R1'),
 g as (select generate_series(1,3) as number)
 insert into public.games(match_id, number)
 select m.id, g.number from m cross join g;
+
+with m as (select id from public.matches where title = 'Rookies Clash R1')
+insert into public.game_seats(match_id, game_number, seat_index, participant_id)
+select g.match_id, g.number, p.seat_priority, p.id
+from public.games g
+join m on g.match_id = m.id
+join public.participants p on p.match_id = g.match_id;
 
 with m as (select id from public.matches where title = 'Rookies Clash R1'),
 g as (select generate_series(1,3) as number),

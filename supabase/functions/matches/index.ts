@@ -84,6 +84,15 @@ async function getMatchDetail(
     return await logAndRespondError(null, 'GET /matches/:id', `Failed to fetch game_scores: ${scErr.message}`, 500, matchPk);
   }
 
+  // Fetch seat mapping (participant per seat per game)
+  const { data: seats, error: seatErr } = await supabase
+    .from("game_seats")
+    .select("game_number, seat_index, participant_id, display_name")
+    .eq("match_id", matchPk);
+  if (seatErr) {
+    return await logAndRespondError(null, 'GET /matches/:id', `Failed to fetch game_seats: ${seatErr.message}`, 500, matchPk);
+  }
+
   const scoresByGame = new Map<number, ScoreInput[]>();
   (scores || []).forEach((r: { game_number: number; seat_index: number; raw_score: number }) => {
     const arr = scoresByGame.get(r.game_number) || [];
@@ -91,20 +100,44 @@ async function getMatchDetail(
     scoresByGame.set(r.game_number, arr);
   });
 
+  // Build fast lookup maps
+  const seatMap = new Map<string, { participant_id: string | null; display_name: string | null }>();
+  (seats || []).forEach((r: { game_number: number; seat_index: number; participant_id: string; display_name?: string }) => {
+    seatMap.set(`${r.game_number}:${r.seat_index}`, { participant_id: r.participant_id, display_name: r.display_name ?? null });
+  });
+  const fallbackPidBySeat = new Map<number, string>();
+  (partsData || []).forEach((p: { id: string; seat_priority: number }) => {
+    if (!fallbackPidBySeat.has(p.seat_priority)) fallbackPidBySeat.set(p.seat_priority, p.id);
+  });
+
   const gameResults = (games || []).map((g: { number: number; created_at: string }) => {
     const arr = scoresByGame.get(g.number) || [];
     if (arr.length === 4) {
       const results = computeGameResults(arr, m.start_points, m.oka_points, m.uma_low, m.uma_high);
-      return { number: g.number, created_at: g.created_at, results };
+      const enriched = results.map((r) => {
+        const key = `${g.number}:${r.seat_index}`;
+        const mapVal = seatMap.get(key);
+        const participant_id = mapVal?.participant_id ?? fallbackPidBySeat.get(r.seat_index) ?? null;
+        const display_name = mapVal?.display_name ?? null;
+        return { ...r, participant_id, display_name };
+      });
+      return { number: g.number, created_at: g.created_at, results: enriched };
     }
-    return { number: g.number, created_at: g.created_at, results: [] as GameResultRow[] };
+    return { number: g.number, created_at: g.created_at, results: [] as (GameResultRow & {participant_id?: string|null; display_name?: string|null})[] };
   });
 
-  // cumulative scores (sum of pt_total by seat_index)
-  const totals = [0, 0, 0, 0];
+  // cumulative scores (sum by participant_id if available; fallback to seat_index)
+  const totalsByPid = new Map<string, number>();
   gameResults.forEach((gr: any) => {
-    (gr.results || []).forEach((r: GameResultRow) => {
-      totals[r.seat_index] += r.pt_total;
+    (gr.results || []).forEach((r: any) => {
+      const pid = r.participant_id as string | undefined;
+      if (pid) {
+        totalsByPid.set(pid, (totalsByPid.get(pid) || 0) + r.pt_total);
+      } else {
+        // fallback to seat-based id mapping
+        const fb = fallbackPidBySeat.get(r.seat_index);
+        if (fb) totalsByPid.set(fb, (totalsByPid.get(fb) || 0) + r.pt_total);
+      }
     });
   });
 
@@ -118,7 +151,7 @@ async function getMatchDetail(
     uma_high: m.uma_high,
     participants: (partsData || []).map((p: any) => ({ id: p.id, name: p.name, seat_priority: p.seat_priority })),
     games: gameResults,
-    cumulative_scores: totals.map((t, i) => ({ seat_index: i, total: t })),
+    cumulative_scores: Array.from(totalsByPid.entries()).map(([participant_id, total]) => ({ participant_id, total })),
     updated_at: m.updated_at,
   });
 }
@@ -191,6 +224,7 @@ Deno.serve(async (req) => {
         return errorResponse("Invalid JSON.", 400);
       }
       const scoresInput: ScoreInput[] = Array.isArray(body?.scores) ? body.scores : [];
+      const playersInput: any[] = Array.isArray(body?.players) ? body.players : [];
       const vErr = validateScores(scoresInput);
       if (vErr) return await logAndRespondError(null, 'POST /matches/:id/games', vErr, 422, idFromPath, { scores: scoresInput });
 
@@ -202,6 +236,38 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (mErr) return await logAndRespondError(null, 'POST /matches/:id/games', `Failed to fetch match: ${mErr.message}`, 500, idFromPath);
       if (!m) return await logAndRespondError(null, 'POST /matches/:id/games', 'not found', 404, idFromPath);
+
+      // Resolve participants for players mapping
+      const { data: parts, error: pErr } = await supabase
+        .from("participants")
+        .select("id, name, seat_priority")
+        .eq("match_id", idFromPath);
+      if (pErr) return await logAndRespondError(null, 'POST /matches/:id/games', `Failed to fetch participants: ${pErr.message}`, 500, idFromPath);
+      const byName = new Map<string, string>();
+      (parts || []).forEach((p: any) => byName.set((p.name || '').toLowerCase(), p.id));
+
+      // Validate players mapping
+      if (!Array.isArray(playersInput) || playersInput.length !== 4) {
+        return errorResponse("players must have 4 items", 422);
+      }
+      const seenSeats = new Set<number>();
+      const seenPids = new Set<string>();
+      const seatRows: { seat_index: number; participant_id: string; display_name?: string }[] = [];
+      for (const pl of playersInput) {
+        const seat_index = Number(pl?.seat_index);
+        if (!Number.isInteger(seat_index) || seat_index < 0 || seat_index > 3) {
+          return errorResponse("players seat_index must be 0..3", 422);
+        }
+        if (seenSeats.has(seat_index)) return errorResponse("each seat_index must appear once (players)", 422);
+        let pid: string | undefined = typeof pl?.participant_id === 'string' ? pl.participant_id : undefined;
+        if (!pid && typeof pl?.name === 'string') {
+          pid = byName.get(pl.name.toLowerCase());
+        }
+        if (!pid) return errorResponse("players must include participant_id or resolvable name", 422);
+        if (seenPids.has(pid)) return errorResponse("same participant cannot appear twice in one game", 422);
+        seenSeats.add(seat_index); seenPids.add(pid);
+        seatRows.push({ seat_index, participant_id: pid, display_name: typeof pl?.display_name === 'string' ? pl.display_name : (typeof pl?.name === 'string' ? pl.name : undefined) });
+      }
 
       // Next game number
       const matchPk = m.id;
@@ -225,6 +291,16 @@ Deno.serve(async (req) => {
         // cleanup inserted game
         await supabase.from("games").delete().eq("match_id", matchPk).eq("number", nextNumber);
         return await logAndRespondError(null, 'POST /matches/:id/games', `Failed to insert scores: ${sErr.message}`, 500, matchPk, { scores: scoresInput, number: nextNumber });
+      }
+
+      // Insert seat mapping
+      const seatIns = seatRows.map(r => ({ match_id: matchPk, game_number: nextNumber, seat_index: r.seat_index, participant_id: r.participant_id, display_name: r.display_name }));
+      const { error: seatInsErr } = await supabase.from("game_seats").insert(seatIns);
+      if (seatInsErr) {
+        // cleanup both
+        await supabase.from("game_scores").delete().eq("match_id", matchPk).eq("game_number", nextNumber);
+        await supabase.from("games").delete().eq("match_id", matchPk).eq("number", nextNumber);
+        return await logAndRespondError(null, 'POST /matches/:id/games', `Failed to insert game_seats: ${seatInsErr.message}`, 500, matchPk, { players: playersInput, number: nextNumber });
       }
 
       // touch matches.updated_at to bump ordering
