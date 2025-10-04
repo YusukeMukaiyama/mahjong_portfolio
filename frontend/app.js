@@ -350,6 +350,10 @@ function renderGames(m) {
   const fallbackNames = [0,1,2,3].map(i => currentParticipants.find(p => p.seat_priority === i)?.name || `Seat ${i}`);
   const savedNames = getGameNames(currentMatchId, g.number) || fallbackNames;
 
+  // Mobile card list rendering
+  const cardList = $("gameCardList");
+  if (cardList) cardList.innerHTML = "";
+
   rows.forEach(r => {
     const tr = document.createElement("tr");
     const tdRank = document.createElement("td"); tdRank.textContent = String(r.rank);
@@ -361,6 +365,31 @@ function renderGames(m) {
     const tdTotal = document.createElement("td"); tdTotal.textContent = r.pt_total.toFixed(1);
     tr.appendChild(tdRank); tr.appendChild(tdName); tr.appendChild(tdScore); tr.appendChild(tdTotal);
     tbody.appendChild(tr);
+
+    // Card view for mobile
+    if (cardList) {
+      const card = document.createElement("div");
+      card.className = "table-card";
+
+      const rowTop = document.createElement("div");
+      rowTop.className = "row";
+      const left = document.createElement("div");
+      const rankBadge = document.createElement("span"); rankBadge.className = "rank-badge"; rankBadge.textContent = String(r.rank);
+      const nameEl = document.createElement("span"); nameEl.className = "name"; nameEl.textContent = savedNames[r.seat_index] || fallbackNames[r.seat_index];
+      left.appendChild(rankBadge); left.appendChild(nameEl);
+      const totalEl = document.createElement("div"); totalEl.textContent = r.pt_total.toFixed(1) + "pt";
+      totalEl.className = r.pt_total > 0 ? "pos" : (r.pt_total < 0 ? "neg" : "");
+      rowTop.appendChild(left); rowTop.appendChild(totalEl);
+
+      const rowBottom = document.createElement("div");
+      const inp2 = document.createElement("input"); inp2.type = "number"; inp2.step = "100"; inp2.value = String(r.raw_score); inp2.id = `editScoreCard-${r.seat_index}`;
+      inp2.style.width = "100%"; inp2.style.textAlign = "right";
+      rowBottom.appendChild(inp2);
+
+      card.appendChild(rowTop);
+      card.appendChild(rowBottom);
+      cardList.appendChild(card);
+    }
   });
 }
 
@@ -368,7 +397,12 @@ function saveEditedGame() {
   const errBox = $("detailScoreError");
   if (errBox) { errBox.style.display = "none"; errBox.textContent = ""; }
   if (!currentMatchId || currentActiveGameNumber == null) return;
-  const vals = [0,1,2,3].map(i => Number((document.getElementById(`editScore-${i}`) || {}).value));
+  const vals = [0,1,2,3].map(i => {
+    const card = document.getElementById(`editScoreCard-${i}`);
+    const table = document.getElementById(`editScore-${i}`);
+    const el = (card && card.offsetParent !== null) ? card : table;
+    return Number((el || {}).value);
+  });
   if (vals.some(v => !Number.isInteger(v))) { showScoreError("整数で入力してください"); return; }
   if (vals.some(v => v % 100 !== 0)) { showScoreError("raw_score は100点単位"); return; }
   const sum = vals.reduce((a,b)=>a+b,0);
@@ -463,10 +497,40 @@ async function submitScores() {
 
 // ------- 累計pt 推移グラフ（Canvas） -------
 const TREND_COLORS = ["#2563eb","#16a34a","#db2777","#f59e0b"]; // 青/緑/ピンク/黄
+
+// Canvas: High-DPI aware resize (keeps aspect from width/height attributes)
+function resizeCanvasToDisplaySize(canvas) {
+  if (!canvas) return null;
+  const dpr = window.devicePixelRatio || 1;
+  const attrW = Number(canvas.getAttribute('width')) || 900;
+  const attrH = Number(canvas.getAttribute('height')) || 320;
+  const aspect = attrH / attrW;
+  const cssWidth = Math.max(1, canvas.clientWidth || (canvas.parentElement?.clientWidth || attrW));
+  const cssHeight = Math.max(1, Math.round(cssWidth * aspect));
+  const pxWidth = Math.round(cssWidth * dpr);
+  const pxHeight = Math.round(cssHeight * dpr);
+  if (canvas.width !== pxWidth || canvas.height !== pxHeight) {
+    canvas.width = pxWidth;
+    canvas.height = pxHeight;
+    canvas.style.width = cssWidth + 'px';
+    canvas.style.height = cssHeight + 'px';
+  }
+  const ctx = canvas.getContext('2d');
+  // map 1 unit = 1 CSS pixel after this transform
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, width: cssWidth, height: cssHeight, dpr };
+}
+
 function drawTrendChartFromGames(m) {
   const canvas = $("trendCanvas"); if (!canvas) return;
-  const ctx = canvas.getContext("2d");
   const games = Array.isArray(m.games) ? m.games : [];
+  // keep last games for resize redraws
+  try { window.__lastGames = games.slice(); } catch {}
+
+  // responsive + high DPI sizing
+  const resized = resizeCanvasToDisplaySize(canvas);
+  if (!resized) return;
+  const ctx = resized.ctx;
 
   // 座席ごとの累計（人は固定表示：参加者 seat_priority 順）
   const namesBySeat = [0,1,2,3].map(i => currentParticipants.find(p => p.seat_priority === i)?.name || `Seat ${i}`);
@@ -481,10 +545,6 @@ function drawTrendChartFromGames(m) {
     [0,1,2,3].forEach(i => series[i].push({ x: no, y: +totals[i] }));
   });
 
-  // サイズ
-  const parentW = canvas.parentElement?.clientWidth || 900;
-  canvas.width = parentW; canvas.height = 320;
-
   // スケール
   const allPts = series.flat();
   const minX = games.length ? games[0].number : 0;
@@ -496,7 +556,7 @@ function drawTrendChartFromGames(m) {
   const yMax = Math.ceil((maxY + padY) * 10) / 10;
 
   const margin = { left: 60, right: 20, top: 20, bottom: 40 };
-  const W = canvas.width, H = canvas.height;
+  const W = resized.width, H = resized.height;
   const X = (x) => maxX === minX ? margin.left : margin.left + (x - minX) * (W - margin.left - margin.right) / (maxX - minX);
   const Y = (y) => yMax === yMin ? H - margin.bottom : H - margin.bottom - (y - yMin) * (H - margin.top - margin.bottom) / (yMax - yMin);
 
@@ -553,7 +613,12 @@ function saveEditedGame() {
   const errBox = $("detailScoreError");
   if (errBox) { errBox.style.display = "none"; errBox.textContent = ""; }
   if (!currentMatchId || currentActiveGameNumber == null) return;
-  const vals = [0,1,2,3].map(i => Number((document.getElementById(`editScore-${i}`) || {}).value));
+  const vals = [0,1,2,3].map(i => {
+    const card = document.getElementById(`editScoreCard-${i}`);
+    const table = document.getElementById(`editScore-${i}`);
+    const el = (card && card.offsetParent !== null) ? card : table;
+    return Number((el || {}).value);
+  });
   if (vals.some(v => !Number.isInteger(v))) { showScoreError("整数で入力してください"); return; }
   if (vals.some(v => v % 100 !== 0)) { showScoreError("raw_score は100点単位"); return; }
   const sum = vals.reduce((a,b)=>a+b,0);

@@ -17,6 +17,9 @@
   --radius-sm: 8px;
 }
 
+/* Global box sizing to avoid layout overflow from padding/borders */
+*, *::before, *::after { box-sizing: border-box; }
+
 /* Light theme override */
 .theme-light {
   --bg: #f6f8fb;
@@ -43,9 +46,10 @@ body {
               radial-gradient(1000px 700px at -10% 120%, rgba(0,212,255,.18), transparent 50%),
               var(--bg);
   color: var(--text);
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, 'Apple Color Emoji', 'Segoe UI Emoji';
+  font-family: 'Noto Sans JP', 'Noto Sans', ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, 'Apple Color Emoji', 'Segoe UI Emoji';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden; /* guard against accidental horizontal overflow */
 }
 
 .header {
@@ -62,6 +66,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  width: 100%;
 }
 .brand {
   display: flex;
@@ -81,12 +86,15 @@ body {
 
 .container {
   max-width: 1080px;
+  width: 100%;
   margin: 0 auto;
   padding: 24px 20px 40px;
+  min-width: 0;
 }
 
 .section {
   margin: 0 0 28px;
+  min-width: 0;
 }
 
 .card {
@@ -96,6 +104,8 @@ body {
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: 20px;
+  overflow: visible; /* 子ラッパーでスクロール管理する */
+  min-width: 0;
 }
 
 .title {
@@ -105,14 +115,26 @@ body {
 .subtitle { margin: 0 0 10px; color: var(--muted); font-weight: 500; }
 
 .grid { display: grid; gap: 12px; }
+.grid > * { min-width: 0; }
 .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-@media (max-width: 720px) { .grid-2, .grid-4 { grid-template-columns: 1fr; } }
+/* ensure grid children can shrink within tracks */
+.grid-4 > * { min-width: 0; }
+/* grid-4: 4 -> 2 -> 1 columns */
+@media (max-width: 992px) { .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .grid-4 { grid-template-columns: 1fr; } }
+/* grid-2: collapse to 1 col on narrower screens */
+@media (max-width: 720px) { .grid-2 { grid-template-columns: 1fr; } }
 
 .field { display: grid; gap: 6px; }
+.field { min-width: 0; }
+/* allow inner controls to shrink without overflowing */
+.field > * { min-width: 0; }
 .field label { font-size: 12px; color: var(--muted); }
 .input, .select, input[type="text"], input[type="number"], select {
   appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
   background: var(--elev-2);
   color: var(--text);
   border: 1px solid var(--border);
@@ -121,6 +143,10 @@ body {
   font-size: 14px;
   outline: none;
   transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  display: block;
 }
 .input:focus, .select:focus, input[type="text"]:focus, input[type="number"]:focus, select:focus {
   border-color: color-mix(in oklab, var(--accent) 60%, transparent);
@@ -134,12 +160,24 @@ select.select {
   background-position: calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px);
   background-size: 6px 6px, 6px 6px;
   background-repeat: no-repeat;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  padding-right: 32px; /* room for the custom arrow */
 }
+
+/* Ensure select itself can shrink even outside .field context */
+select, .select { min-width: 0; }
 
 /* Remove number spin buttons */
 input[type=number]::-webkit-outer-spin-button,
 input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 input[type=number] { -moz-appearance: textfield; }
+
+/* Media elements should stay within container */
+img, svg, canvas, video { max-width: 100%; height: auto; display: block; }
+canvas { max-width: 100%; display: block; }
+#trendCanvas { width: 100%; height: auto; display: block; max-width: 100%; }
 
 .btn {
   appearance: none;
@@ -197,16 +235,40 @@ input[type=number] { -moz-appearance: textfield; }
 .results { display: grid; gap: 6px; }
 .result-row { display: grid; grid-template-columns: 1fr repeat(5, max-content); align-items: center; gap: 10px; font-size: 13px; }
 .result-row strong { color: var(--text); }
+.table-clean { width: 100%; table-layout: fixed; }
 .table-clean tbody tr { border-bottom: 1px solid var(--border); }
 .table-clean tbody tr:last-child { border-bottom: none; }
-.table-clean td, .table-clean th { padding: 8px 6px; text-align: center; }
+.table-clean td, .table-clean th { padding: 10px 8px; text-align: center; overflow-wrap: anywhere; word-break: break-word; }
+.table-wrapper { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+/* 狭幅域ではとにかく収める（折り返し可・最小幅0） */
+.table-clean th, .table-clean td { white-space: normal; min-width: 0; }
+/* 画面に余裕があるときだけ“見栄え重視の nowrap”へ */
+@media (min-width: 880px) {
+  .table-clean th, .table-clean td { white-space: nowrap; min-width: 88px; }
+}
+
+
+/* Trend graph container: allow horizontal scroll if needed */
+.trend-container { width: 100%; overflow-x: auto; }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--elev-1); border: 1px solid var(--border); font-size: 12px; }
 .alert { padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid rgba(255,93,110,.35); background: linear-gradient(180deg, rgba(255,93,110,.18), rgba(255,93,110,.08)); color: #fff; }
 .alert-error { border-color: rgba(255,93,110,.45); }
 
 /* Tabs for game history */
-.tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--border); margin-bottom: 10px; flex-wrap: wrap; }
+.tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+  min-width: 0; /* ← これが縮退許可の決め手 */
+}
 .tab { appearance: none; border: 1px solid var(--border); background: var(--elev-2); color: var(--text); border-radius: 8px 8px 0 0; padding: 8px 10px; font-size: 13px; cursor: pointer; }
+.legend, #gameTabs, #detailGames { width: 100%; min-width: 0; }
+
 .tab[aria-selected="true"], .tab.tab-active { background: var(--elev-1); border-bottom-color: var(--elev-1); font-weight: 600; }
 .tab:focus-visible { outline: 3px solid color-mix(in oklab, var(--accent) 40%, transparent); outline-offset: 2px; }
 .table-edit input[type="number"] { width: 100%; max-width: 120px; text-align: right; }
@@ -218,7 +280,7 @@ input[type=number] { -moz-appearance: textfield; }
 .cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 14px;
+  gap: 16px;
 }
 .match-card {
   position: relative;
@@ -273,3 +335,132 @@ input[type=number] { -moz-appearance: textfield; }
 .toast { padding: 12px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--elev-1); color: var(--text); box-shadow: var(--shadow); }
 .toast-success { border-color: rgba(0,208,138,.45); background: linear-gradient(180deg, rgba(0,208,138,.18), rgba(0,208,138,.08)); }
 .toast-error { border-color: rgba(255,93,110,.45); background: linear-gradient(180deg, rgba(255,93,110,.18), rgba(255,93,110,.08)); }
+
+/* Utility widths and scroll helpers */
+.w-full { width: 100%; }
+.max-w-full { max-width: 100%; }
+.min-w-0 { min-width: 0; }
+.scroll-x, .w-full.max-w-full.min-w-0 { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* Table -> Card switchers */
+.hide-on-mobile { display: block; }
+.hide-on-desktop { display: none; }
+@media (max-width: 480px) {
+  .hide-on-mobile { display: none !important; }
+  .hide-on-desktop { display: block !important; }
+}
+
+/* Mobile cards for table rows */
+.card-list { display: grid; gap: 12px; }
+.table-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--elev-2); padding: 12px; display: grid; gap: 8px; }
+.table-card .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.table-card .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.table-card .meta { color: var(--muted); font-size: 12px; }
+
+/* ---------------------- */
+/* Mobile (<= 640px)      */
+/* ---------------------- */
+@media (max-width: 640px) {
+  .header-inner { padding: 12px 14px; }
+  .brand-title { font-size: 15px; }
+
+  .container { padding: 16px 14px 28px; }
+  .section { margin-bottom: 22px; }
+  .card { padding: 16px; border-radius: 10px; }
+  .title { font-size: 18px; margin-bottom: 12px; }
+  .subtitle { font-size: 13px; }
+
+  .grid { gap: 10px; }
+  .grid-2 { grid-template-columns: 1fr; }
+
+  /* Inputs: avoid iOS zoom and improve touch targets */
+  .input, .select, input[type="text"], input[type="number"], select {
+    font-size: 16px; /* prevent iOS zoom */
+    padding: 12px 12px;
+  }
+
+  .toolbar { gap: 8px; flex-wrap: wrap; }
+  .toolbar-inline { flex-direction: column; align-items: stretch; }
+  .toolbar-inline .input, .toolbar-inline .select { min-width: 0; width: 100%; }
+
+  /* Cards/list */
+  .cards-grid { grid-template-columns: 1fr; gap: 12px; }
+  .match-card { padding: 14px; }
+  .card-meta { gap: 6px; font-size: 11px; }
+
+  /* Detail KPIs */
+  .kpi { gap: 8px; font-size: 12px; }
+  .pill { padding: 5px 8px; }
+
+  /* Tables: horizontal scroll and compact spacing */
+  .w-full { width: 100%; }
+  .max-w-full { max-width: 100%; }
+  .min-w-0 { min-width: 0; }
+  .w-full.max-w-full.min-w-0 { overflow-x: auto; }
+  .table-clean td, .table-clean th { padding: 8px 6px; font-size: 13px; }
+  .table-edit input[type="number"] { max-width: 100px; }
+
+  /* Tabs: horizontal scroll on mobile */
+  .tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tab { white-space: nowrap; }
+
+  /* Buttons: stack and widen when in action rows */
+  .card-actions { flex-direction: column; }
+  .card-actions .btn { width: 100%; }
+
+  /* Toast: full-width bottom bar */
+  .toast-container { left: 12px; right: 12px; bottom: 12px; }
+  .toast { width: 100%; }
+
+  .footer-space { height: 40px; }
+}
+
+/* ---------------------- */
+/* Tiny (<= 375px)        */
+/* ---------------------- */
+@media (max-width: 375px) {
+  .header-inner { padding: 10px 10px; }
+  .brand-badge { width: 24px; height: 24px; }
+  .brand-title { font-size: 14px; }
+
+  .container { padding: 12px 10px 20px; }
+  .section { margin-bottom: 18px; }
+  .card { padding: 12px; }
+  .title { font-size: 17px; margin-bottom: 10px; }
+  .subtitle { font-size: 12px; }
+
+  .grid { gap: 8px; }
+  .grid-2 { grid-template-columns: 1fr; }
+  .grid-4 { grid-template-columns: 1fr; }
+
+  .field label { font-size: 11px; }
+  .input, .select, input[type="text"], input[type="number"], select { padding: 10px 10px; font-size: 16px; }
+
+  .tabs { gap: 6px; }
+  .tab { padding: 6px 8px; font-size: 12px; }
+
+  .table-clean td, .table-clean th { padding: 6px 6px; font-size: 12px; min-width: 84px; }
+  .table-edit input[type="number"] { max-width: 90px; }
+
+  .chips { gap: 4px; }
+  .card-meta { font-size: 11px; gap: 6px; }
+  .pill { padding: 4px 6px; }
+  .kpi { gap: 6px; font-size: 11px; }
+
+  .toast-container { left: 8px; right: 8px; bottom: 8px; }
+}
+
+
+/* 置換要素 select の最長文字での膨張をラッパーが物理的に止める */
+.select-wrap {
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+  display: block;
+}
+.select-wrap > select {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  display: block;
+}
