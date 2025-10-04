@@ -377,6 +377,7 @@ function renderGames(m) {
     inp.type = "number"; inp.step = "100"; inp.value = String(r.raw_score); inp.id = `editScore-${r.seat_index}`;
     tdScore.appendChild(inp);
     const tdTotal = document.createElement("td"); tdTotal.textContent = r.pt_total.toFixed(1);
+    tdTotal.classList.add('score');
     tr.appendChild(tdRank); tr.appendChild(tdName); tr.appendChild(tdScore); tr.appendChild(tdTotal);
     tbody.appendChild(tr);
 
@@ -392,7 +393,7 @@ function renderGames(m) {
       const nameEl = document.createElement("span"); nameEl.className = "name"; nameEl.textContent = savedNames[r.seat_index] || fallbackNames[r.seat_index];
       left.appendChild(rankBadge); left.appendChild(nameEl);
       const totalEl = document.createElement("div"); totalEl.textContent = r.pt_total.toFixed(1) + "pt";
-      totalEl.className = r.pt_total > 0 ? "pos" : (r.pt_total < 0 ? "neg" : "");
+      totalEl.className = (r.pt_total > 0 ? "pos" : (r.pt_total < 0 ? "neg" : "")) + " score";
       rowTop.appendChild(left); rowTop.appendChild(totalEl);
 
       const rowBottom = document.createElement("div");
@@ -444,7 +445,7 @@ function renderTotals(m) {
     const tdRank = document.createElement("td"); tdRank.innerHTML = `<span class="rank-badge">${i+1}</span>`;
     const tdName = document.createElement("td"); tdName.textContent = r.name;
     const tdTotal = document.createElement("td"); tdTotal.textContent = `${r.total.toFixed(1)}pt`;
-    tdTotal.className = r.total > 0 ? "pos" : (r.total < 0 ? "neg" : "");
+    tdTotal.className = (r.total > 0 ? "pos" : (r.total < 0 ? "neg" : "")) + " score";
     tr.appendChild(tdRank); tr.appendChild(tdName); tr.appendChild(tdTotal);
     tbody.appendChild(tr);
   });

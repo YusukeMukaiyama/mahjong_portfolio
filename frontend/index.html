@@ -10,10 +10,10 @@
 <body>
   <header class="header">
     <div class="header-inner">
-      <div class="brand">
+      <a class="brand" id="brandHome" href="#/" aria-label="一覧へ戻る">
         <div class="brand-badge"></div>
         <div class="brand-title">対局管理</div>
-      </div>
+      </a>
       <div class="toolbar">
         <button id="openCreateModalBtn" class="btn btn-primary" aria-haspopup="dialog" aria-controls="createModal">対局作成</button>
         <button id="themeToggle" class="btn btn-ghost" aria-label="テーマ切替">🌓</button>
@@ -174,7 +174,7 @@
               <!-- モバイル用カード表示 -->
               <div id="gameCardList" class="card-list hide-on-desktop"></div>
               <div style="display:flex; justify-content:flex-end; margin-top:10px;">
-                <button id="saveGameEditBtn" class="btn btn-primary">このゲームの点数を保存</button>
+                <button id="saveGameEditBtn" class="btn btn-primary">このゲームの点数を修正</button>
               </div>
             </div>
           </div>
