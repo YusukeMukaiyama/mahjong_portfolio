@@ -256,6 +256,14 @@ function renderDetail(m) {
   currentParticipants = (m.participants || []).slice();
 
   $("detailTitle").textContent = m.title;
+  // 次のゲーム数（例: 10半荘目）をタイトル横に表示
+  const nextGameEl = $("nextGameIndicator");
+  if (nextGameEl) {
+    const games = Array.isArray(m.games) ? m.games : [];
+    const maxNo = games.length ? Math.max(...games.map(g => g.number || 0)) : 0;
+    const next = maxNo + 1;
+    nextGameEl.innerHTML = `<span class="num">${next}</span><span class="unit">半荘目</span>`;
+  }
   $("detailStart").textContent = m.start_points;
   $("detailOka").textContent = m.oka_points;
   $("detailUma").textContent = `${Math.abs(m.uma_low)} / ${Math.abs(m.uma_high)}`;
@@ -496,7 +504,8 @@ async function submitScores() {
 }
 
 // ------- 累計pt 推移グラフ（Canvas） -------
-const TREND_COLORS = ["#2563eb","#16a34a","#db2777","#f59e0b"]; // 青/緑/ピンク/黄
+// Pastel color palette for trend lines (blue/green/pink/yellow)
+const TREND_COLORS = ["#93c5fd","#86efac","#f9a8d4","#fde68a"]; // pastel
 
 // Canvas: High-DPI aware resize (keeps aspect from width/height attributes)
 function resizeCanvasToDisplaySize(canvas) {

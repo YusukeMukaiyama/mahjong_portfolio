@@ -80,7 +80,10 @@
     <section id="detailView" class="section hidden">
       <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-          <h2 id="detailTitle" class="title" style="margin:0;">対局詳細</h2>
+          <div style="display:flex; align-items:center; gap:8px; white-space:nowrap;">
+            <h2 id="detailTitle" class="title" style="margin:0;">対局詳細</h2>
+            <span id="nextGameIndicator" aria-live="polite"></span>
+          </div>
           <div class="toolbar">
             <button class="btn" id="backBtn">← 一覧へ戻る</button>
           </div>
@@ -96,27 +99,26 @@
         <div style="margin-top:16px; display:grid; gap:20px;">
           <!-- スコア入力 -->
           <div>
-            <h3 class="subtitle">スコア入力（東・南・西・北の名前は同点用のメモ）</h3>
             <div id="detailScoreError" class="error"></div>
             <div class="rs-section rs-score">
             <div class="grid grid-4" style="margin-top:8px;">
               <div class="field">
-                <label>東の名前</label>
+                <label>東家</label>
                 <select class="select" id="seat0name"></select>
                 <input class="input" id="seat0" type="number" placeholder="スコア（例: 25000）" />
               </div>
               <div class="field">
-                <label>南の名前</label>
+                <label>南家</label>
                 <select class="select" id="seat1name"></select>
                 <input class="input" id="seat1" type="number" placeholder="スコア" />
               </div>
               <div class="field">
-                <label>西の名前</label>
+                <label>西家</label>
                 <select class="select" id="seat2name"></select>
                 <input class="input" id="seat2" type="number" placeholder="スコア" />
               </div>
               <div class="field">
-                <label>北の名前</label>
+                <label>北家</label>
                 <select class="select" id="seat3name"></select>
                 <input class="input" id="seat3" type="number" placeholder="スコア" />
               </div>

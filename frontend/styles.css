@@ -251,6 +251,8 @@ canvas { max-width: 100%; display: block; }
 /* Trend graph container: allow horizontal scroll if needed */
 .trend-container { width: 100%; overflow-x: auto; }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--elev-1); border: 1px solid var(--border); font-size: 12px; }
+#nextGameIndicator .num { font-size: 16px; font-weight: 400; }
+#nextGameIndicator .unit { font-size: 12px; color: var(--muted); }
 .alert { padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid rgba(255,93,110,.35); background: linear-gradient(180deg, rgba(255,93,110,.18), rgba(255,93,110,.08)); color: #fff; }
 .alert-error { border-color: rgba(255,93,110,.45); }
 
