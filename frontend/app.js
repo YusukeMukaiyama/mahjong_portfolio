@@ -729,19 +729,38 @@ function drawTrendChartFromGames(m) {
   ctx.strokeStyle = "#9ca3af";
   ctx.strokeRect(margin.left, margin.top, W - margin.left - margin.right, H - margin.top - margin.bottom);
 
-  // ライン + マーカー
-  const hoverDot = window.__trendHover || null; // { i, game }
+  // ライン（滑らかな曲線） + マーカー
+  const hoverDot = (window.__trendLocked || window.__trendHover) || null; // { i, game }
+  // Catmull-Rom → Cubic Bezier 変換で滑らかに
+  function drawSmoothLine(pixels) {
+    if (!pixels.length) return;
+    if (pixels.length === 1) { ctx.moveTo(pixels[0].x, pixels[0].y); return; }
+    ctx.moveTo(pixels[0].x, pixels[0].y);
+    for (let i = 0; i < pixels.length - 1; i++) {
+      const p0 = pixels[i - 1] || pixels[i];
+      const p1 = pixels[i];
+      const p2 = pixels[i + 1];
+      const p3 = pixels[i + 2] || p2;
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+    }
+  }
+
   [0,1,2,3].forEach((i) => {
     const pts = series[i];
     if (!pts.length) return;
+    const pix = pts.map(p => ({ x: X(p.x), y: Y(p.y) }));
     ctx.beginPath(); ctx.lineWidth = 2; ctx.strokeStyle = TREND_COLORS[i % TREND_COLORS.length];
-    pts.forEach((p, j) => { const x = X(p.x), y = Y(p.y); if (j === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
+    drawSmoothLine(pix);
     ctx.stroke();
     // 各頂点に●マーカー
     pts.forEach((p) => {
       const x = X(p.x), y = Y(p.y);
       const active = hoverDot && hoverDot.i === i && hoverDot.game === p.x;
-      const r = active ? 5 : 3;
+      const r = active ? 6 : 4;
       ctx.fillStyle = TREND_COLORS[i % TREND_COLORS.length];
       ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
       if (active) { ctx.strokeStyle = '#11182744'; ctx.lineWidth = 2; ctx.stroke(); }
@@ -758,6 +777,20 @@ function drawTrendChartFromGames(m) {
     ctx.beginPath(); ctx.moveTo(xpx, margin.top); ctx.lineTo(xpx, H - margin.bottom); ctx.stroke();
     ctx.restore();
   }
+  // ホバー中の水平ガイド
+  if (hoverDot) {
+    const i = hoverDot.i;
+    const pts = series[i] || [];
+    const p = pts.find(pp => pp.x === hoverDot.game);
+    if (p) {
+      const ypx = Y(p.y);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(148,163,184,.5)';
+      ctx.setLineDash([4,3]);
+      ctx.beginPath(); ctx.moveTo(margin.left, ypx); ctx.lineTo(W - margin.right, ypx); ctx.stroke();
+      ctx.restore();
+    }
+  }
 
   // 吹き出し: アクティブな点にキャンバス内で表示
   if (hoverDot) {
@@ -766,7 +799,7 @@ function drawTrendChartFromGames(m) {
     const p = pts.find(pp => pp.x === hoverDot.game);
     if (p) {
       const px = X(p.x), py = Y(p.y);
-      const name = namesBySeat[i] || ("Seat " + i);
+      const name = namesById[i] || ("Seat " + i);
       const text = `${name}: ${p.y.toFixed(1)}pt`;
 
       const isLight = document.body.classList.contains('theme-light');
@@ -864,6 +897,40 @@ function ensureTrendTooltip() {
 function bindTrendPointerOnce(canvas) {
   if (!canvas || canvas.__trendBound) return;
   const tip = ensureTrendTooltip();
+  function selectFromPointCoords(clientX, clientY) {
+    const geom = window.__trendGeom; const games = window.__trendGames || [];
+    if (!geom || !games.length) return { type: 'none' };
+    const rect = canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+
+    const X = (gNo) => geom.maxX === geom.minX ? geom.margin.left : geom.margin.left + (gNo - geom.minX) * (geom.W - geom.margin.left - geom.margin.right) / (geom.maxX - geom.minX);
+    const Y = (val) => geom.yMax === geom.yMin ? geom.H - geom.margin.bottom : geom.H - geom.margin.bottom - (val - geom.yMin) * (geom.H - geom.margin.top - geom.margin.bottom) / (geom.yMax - geom.yMin);
+
+    // 近接ヒット（広め半径）
+    let best = Infinity; let bestDot = null; const R = 28;
+    const series = window.__trendSeries || [];
+    [0,1,2,3].forEach(i => {
+      (series[i] || []).forEach(p => {
+        const sx = X(p.x), sy = Y(p.y);
+        const d = Math.hypot(sx - x, sy - y);
+        if (d < best) { best = d; bestDot = { i, game: p.x, px: sx, py: sy, y: p.y }; }
+      });
+    });
+    if (bestDot && best <= R) return { type: 'dot', bestDot };
+
+    // Xにスナップし、そのゲームでYが最も近い人
+    let nearest = games[0]; let bestX = Infinity;
+    games.forEach(g => { const dx = Math.abs(X(g) - x); if (dx < bestX) { bestX = dx; nearest = g; } });
+    let bestI = -1; let bestDy = Infinity; let vy = null;
+    [0,1,2,3].forEach(i => {
+      const arr = series[i] || []; const row = arr.find(p => p.x === nearest);
+      if (!row) return; const yy = Y(row.y); const dy = Math.abs(yy - y);
+      if (dy < bestDy) { bestDy = dy; bestI = i; vy = row.y; }
+    });
+    if (bestI >= 0) return { type: 'snap', bestDot: { i: bestI, game: nearest, px: X(nearest), py: Y(vy), y: vy } };
+    return { type: 'none' };
+  }
   const onMove = (ev) => {
     const geom = window.__trendGeom; const games = window.__trendGames || [];
     if (!geom || !games.length) return;
@@ -885,7 +952,7 @@ function bindTrendPointerOnce(canvas) {
         if (d2 < best) { best = d2; bestDot = { i, game: p.x, px, py, y: p.y }; }
       });
     });
-    const within = bestDot && Math.sqrt(best) <= 12;
+    const within = bestDot && Math.sqrt(best) <= 20; // タップでも反応しやすく
     if (within) {
       window.__trendHover = { i: bestDot.i, game: bestDot.game };
       window.__trendHighlight = bestDot.game;
@@ -904,10 +971,22 @@ function bindTrendPointerOnce(canvas) {
       return;
     }
 
-    // 最近傍のゲーム（X）をフォールバック
+    // 最近傍のゲーム（X）をフォールバック: そのゲームでYが最も近い人を選択
     let nearest = games[0]; let bestX = Infinity;
     games.forEach(g => { const dx = Math.abs(X(g) - x); if (dx < bestX) { bestX = dx; nearest = g; } });
-    window.__trendHighlight = nearest; window.__trendHover = null;
+    let bestI = -1; let bestDy = Infinity; let vy = null;
+    [0,1,2,3].forEach(i => {
+      const arr = (window.__trendSeries[i] || []);
+      const row = arr.find(p => p.x === nearest);
+      if (!row) return; const yy = Y(row.y); const dy = Math.abs(yy - y);
+      if (dy < bestDy) { bestDy = dy; bestI = i; vy = row.y; }
+    });
+    if (bestI >= 0) {
+      window.__trendHover = { i: bestI, game: nearest };
+      window.__trendHighlight = nearest;
+    } else {
+      window.__trendHover = null; window.__trendHighlight = nearest;
+    }
     drawTrendChartFromGames({ games: window.__lastGames || [] });
     if (tip) tip.style.display = 'none';
     return;
@@ -927,12 +1006,24 @@ function bindTrendPointerOnce(canvas) {
     const ty2 = geom.margin.top + 8;
     tip.style.left = tx2 + 'px'; tip.style.top = ty2 + 'px';
   };
-  const onLeave = () => { window.__trendHighlight = null; window.__trendHover = null; if (tip) tip.style.display = 'none'; drawTrendChartFromGames({ games: window.__lastGames || [] }); };
+  const onLeave = () => { if (!window.__trendLocked) { window.__trendHighlight = null; window.__trendHover = null; if (tip) tip.style.display = 'none'; drawTrendChartFromGames({ games: window.__lastGames || [] }); } };
+  const onClick = (ev) => {
+    const point = ev.changedTouches ? ev.changedTouches[0] : ev;
+    const sel = selectFromPointCoords(point.clientX, point.clientY);
+    if (sel.type === 'dot' || sel.type === 'snap') {
+      window.__trendLocked = { i: sel.bestDot.i, game: sel.bestDot.game };
+      window.__trendHighlight = sel.bestDot.game;
+    } else {
+      window.__trendLocked = null; window.__trendHover = null; window.__trendHighlight = null;
+    }
+    drawTrendChartFromGames({ games: window.__lastGames || [] });
+  };
   canvas.addEventListener('mousemove', onMove);
   canvas.addEventListener('touchstart', onMove, { passive: true });
   canvas.addEventListener('touchmove', onMove, { passive: true });
   canvas.addEventListener('mouseleave', onLeave);
-  canvas.addEventListener('touchend', onLeave);
+  canvas.addEventListener('click', onClick);
+  canvas.addEventListener('touchend', onClick);
   canvas.__trendBound = true;
 }
 

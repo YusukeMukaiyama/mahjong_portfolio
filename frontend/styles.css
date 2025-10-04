@@ -206,7 +206,7 @@ input[type=number] { -moz-appearance: textfield; }
 /* Media elements should stay within container */
 img, svg, canvas, video { max-width: 100%; height: auto; display: block; }
 canvas { max-width: 100%; display: block; }
-#trendCanvas { width: 100%; height: auto; display: block; max-width: 100%; }
+#trendCanvas { width: 100%; height: auto; display: block; max-width: 100%; touch-action: none; }
 
 .btn {
   appearance: none;
