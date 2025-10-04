@@ -78,12 +78,28 @@ function setBusy(btn, busy, labelBusy) {
 }
 
 function go(path) {
-  history.pushState({}, "", path);
-  route();
+  // Use hash-based navigation to avoid server 404s on reload
+  if (!path) path = "/";
+  // If full URL passed, extract the path/hash part
+  try {
+    if (/^https?:\/\//.test(path)) {
+      const u = new URL(path);
+      path = u.hash && u.hash.startsWith('#') ? u.hash : u.pathname + u.search + (u.hash || "");
+    }
+  } catch (_) {}
+  if (path.startsWith('#')) {
+    location.hash = path;
+  } else {
+    // Ensure leading slash
+    if (!path.startsWith('/')) path = '/' + path;
+    location.hash = '#' + path;
+  }
 }
 
 function route() {
-  const path = location.pathname;
+  // Prefer hash routing if present, fallback to pathname
+  const hash = location.hash || "";
+  const path = hash.startsWith('#') && hash.length > 1 ? hash.slice(1) : location.pathname;
   const m = path.match(/^\/matches\/([^\/]+)$/);
   if (m) {
     const id = decodeURIComponent(m[1]);
@@ -216,10 +232,10 @@ function renderMatches(list) {
     const when = new Date(m.updated_at);
     const gameCount = typeof m.game_count === 'number' ? m.game_count : 0;
     const link = document.createElement('a');
-    link.href = `/matches/${encodeURIComponent(m.id)}`;
+    link.href = `/#/matches/${encodeURIComponent(m.id)}`;
     link.className = 'card-link';
     link.setAttribute('aria-label', `対局「${m.title}」を開く`);
-    link.addEventListener('click', (ev) => { ev.preventDefault(); go(link.href); });
+    // No custom click handler needed; rely on hashchange
 
     const card = document.createElement('div');
     card.className = 'match-card';
@@ -255,7 +271,10 @@ function renderMatches(list) {
     const openBtn = document.createElement('button');
     openBtn.className = 'btn btn-primary';
     openBtn.textContent = '詳細を開く';
-    openBtn.addEventListener('click', (ev) => { ev.preventDefault(); go(link.href); });
+    openBtn.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      go(`/matches/${encodeURIComponent(m.id)}`);
+    });
     actions.appendChild(openBtn);
     card.appendChild(actions);
 
@@ -543,6 +562,7 @@ window.addEventListener("DOMContentLoaded", () => {
   $("createBtn").addEventListener("click", createMatch);
   $("backBtn").addEventListener("click", (e) => { e.preventDefault(); go("/"); });
   window.addEventListener("popstate", route);
+  window.addEventListener("hashchange", route);
   $("saveGameBtn").addEventListener("click", submitScores);
   const saveEditBtn = $("saveGameEditBtn");
   if (saveEditBtn) saveEditBtn.addEventListener('click', saveEditedGame);
