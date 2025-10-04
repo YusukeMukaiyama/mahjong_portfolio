@@ -98,6 +98,7 @@
           <div>
             <h3 class="subtitle">スコア入力（東・南・西・北の名前は同点用のメモ）</h3>
             <div id="detailScoreError" class="error"></div>
+            <div class="rs-section rs-score">
             <div class="grid grid-4" style="margin-top:8px;">
               <div class="field">
                 <label>東の名前</label>
@@ -123,11 +124,13 @@
             <div style="margin-top:12px;">
               <button class="btn btn-primary" id="saveGameBtn">登録</button>
             </div>
+            </div>
           </div>
 
           <!-- 累計順位 -->
           <div>
             <h3 class="subtitle">累計順位</h3>
+            <div class="rs-section rs-totals">
             <div class="table-wrapper w-full">
               <table class="table-clean" style="width:100%; border-collapse: collapse;">
                 <thead class="meta" style="display:none;">
@@ -136,12 +139,13 @@
                 <tbody id="totalsTable"></tbody>
               </table>
             </div>
+            </div>
           </div>
 
           <!-- 過去の履歴 -->
           <div>
             <h3 class="subtitle">過去の履歴</h3>
-            <div id="detailGames">
+            <div id="detailGames" class="rs-section rs-history">
               <div id="gameTabs" class="tabs" role="tablist" aria-label="ゲーム切替"></div>
               <div class="table-wrapper w-full hide-on-mobile">
                 <table class="table-clean table-edit" style="width:100%; border-collapse: collapse;">
@@ -167,10 +171,12 @@
           <!-- 推移グラフ -->
           <div>
             <h3 class="subtitle">累計pt 推移</h3>
-            <div id="trendContainer" class="trend-container">
-              <canvas id="trendCanvas" width="900" height="320" role="img" aria-label="累計ptの推移グラフ"></canvas>
+            <div class="rs-section rs-trend">
+              <div id="trendContainer" class="trend-container">
+                <canvas id="trendCanvas" width="900" height="660" data-aspect="0.75" role="img" aria-label="累計ptの推移グラフ"></canvas>
+              </div>
+              <div id="trendLegend" class="legend" style="display:flex; gap:12px; flex-wrap:wrap; margin-top:8px;"></div>
             </div>
-            <div id="trendLegend" class="legend" style="display:flex; gap:12px; flex-wrap:wrap; margin-top:8px;"></div>
           </div>
         </div>
       </div>

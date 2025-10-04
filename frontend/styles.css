@@ -354,8 +354,13 @@ canvas { max-width: 100%; display: block; }
 .card-list { display: grid; gap: 12px; }
 .table-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--elev-2); padding: 12px; display: grid; gap: 8px; }
 .table-card .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.table-card .row > * { min-width: 0; }
+.table-card .row > div:first-child { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .table-card .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .table-card .meta { color: var(--muted); font-size: 12px; }
+
+/* Responsive section wrapper for score, history, and trend areas */
+.rs-section { width: 100%; }
 
 /* ---------------------- */
 /* Mobile (<= 640px)      */
@@ -413,7 +418,15 @@ canvas { max-width: 100%; display: block; }
   .toast { width: 100%; }
 
   .footer-space { height: 40px; }
+  /* Section wrappers shrink progressively (first step) */
+  .rs-section { max-width: 92vw; margin-left: auto; margin-right: auto; }
 }
+
+/* Progressive shrink of section wrappers for narrow widths */
+@media (max-width: 525px) { .rs-section { max-width: calc(92vw - 24px); } }
+@media (max-width: 475px) { .rs-section { max-width: calc(88vw - 24px); } }
+@media (max-width: 375px) { .rs-section { max-width: calc(86vw - 24px); } }
+@media (max-width: 350px) { .rs-section { max-width: calc(84vw - 24px); } }
 
 /* ---------------------- */
 /* Tiny (<= 375px)        */

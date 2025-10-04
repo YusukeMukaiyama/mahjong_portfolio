@@ -504,7 +504,7 @@ function resizeCanvasToDisplaySize(canvas) {
   const dpr = window.devicePixelRatio || 1;
   const attrW = Number(canvas.getAttribute('width')) || 900;
   const attrH = Number(canvas.getAttribute('height')) || 320;
-  const aspect = attrH / attrW;
+  const aspect = Number(canvas.dataset.aspect) || (attrH / attrW);
   const cssWidth = Math.max(1, canvas.clientWidth || (canvas.parentElement?.clientWidth || attrW));
   const cssHeight = Math.max(1, Math.round(cssWidth * aspect));
   const pxWidth = Math.round(cssWidth * dpr);
@@ -581,18 +581,35 @@ function drawTrendChartFromGames(m) {
   ctx.strokeStyle = "#9ca3af";
   ctx.strokeRect(margin.left, margin.top, W - margin.left - margin.right, H - margin.top - margin.bottom);
 
-  // ライン
+  // ライン + マーカー
+  const hoverDot = window.__trendHover || null; // { i, game }
   [0,1,2,3].forEach((i) => {
     const pts = series[i];
     if (!pts.length) return;
     ctx.beginPath(); ctx.lineWidth = 2; ctx.strokeStyle = TREND_COLORS[i % TREND_COLORS.length];
     pts.forEach((p, j) => { const x = X(p.x), y = Y(p.y); if (j === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
     ctx.stroke();
-    // 終点マーカー
-    const last = pts[pts.length-1]; const lx = X(last.x), ly = Y(last.y);
-    ctx.fillStyle = TREND_COLORS[i % TREND_COLORS.length];
-    ctx.beginPath(); ctx.arc(lx, ly, 3, 0, Math.PI * 2); ctx.fill();
+    // 各頂点に●マーカー
+    pts.forEach((p) => {
+      const x = X(p.x), y = Y(p.y);
+      const active = hoverDot && hoverDot.i === i && hoverDot.game === p.x;
+      const r = active ? 5 : 3;
+      ctx.fillStyle = TREND_COLORS[i % TREND_COLORS.length];
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      if (active) { ctx.strokeStyle = '#11182744'; ctx.lineWidth = 2; ctx.stroke(); }
+    });
   });
+
+  // ホバー中の縦ガイド（ゲーム単位）
+  const hl = window.__trendHighlight;
+  if (hl != null) {
+    const xpx = X(hl);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(148,163,184,.9)';
+    ctx.setLineDash([4,3]);
+    ctx.beginPath(); ctx.moveTo(xpx, margin.top); ctx.lineTo(xpx, H - margin.bottom); ctx.stroke();
+    ctx.restore();
+  }
 
   // 凡例
   const legend = $("trendLegend");
@@ -606,6 +623,103 @@ function drawTrendChartFromGames(m) {
       item.appendChild(sw); item.appendChild(label); legend.appendChild(item);
     });
   }
+
+  // インタラクション用のジオメトリとデータを保存
+  try {
+    window.__trendGeom = { margin, W, H, minX, maxX, yMin, yMax };
+    window.__trendGames = games.map(g => g.number);
+    window.__trendNames = namesBySeat;
+    window.__trendSeries = series; // arrays of {x,y}
+    window.__lastGames = games.slice();
+  } catch {}
+
+  ensureTrendTooltip();
+  bindTrendPointerOnce(canvas);
+}
+
+function ensureTrendTooltip() {
+  const holder = document.getElementById('trendContainer');
+  if (!holder) return null;
+  let tip = document.getElementById('trendTooltip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'trendTooltip';
+    tip.className = 'trend-tooltip';
+    tip.style.display = 'none';
+    holder.appendChild(tip);
+  }
+  return tip;
+}
+
+function bindTrendPointerOnce(canvas) {
+  if (!canvas || canvas.__trendBound) return;
+  const tip = ensureTrendTooltip();
+  const onMove = (ev) => {
+    const geom = window.__trendGeom; const games = window.__trendGames || [];
+    if (!geom || !games.length) return;
+    const rect = canvas.getBoundingClientRect();
+    const client = ev.touches ? ev.touches[0] : ev;
+    const x = client.clientX - rect.left;
+    const y = client.clientY - rect.top;
+
+    const X = (gNo) => geom.maxX === geom.minX ? geom.margin.left : geom.margin.left + (gNo - geom.minX) * (geom.W - geom.margin.left - geom.margin.right) / (geom.maxX - geom.minX);
+    const Y = (val) => geom.yMax === geom.yMin ? geom.H - geom.margin.bottom : geom.H - geom.margin.bottom - (val - geom.yMin) * (geom.H - geom.margin.top - geom.margin.bottom) / (geom.yMax - geom.yMin);
+
+    // 最近傍の●を探索
+    let best = Infinity; let bestDot = null; // {i, game, px, py, y}
+    [0,1,2,3].forEach(i => {
+      const s = window.__trendSeries[i] || [];
+      s.forEach(p => {
+        const px = X(p.x), py = Y(p.y);
+        const dx = px - x, dy = py - y; const d2 = dx*dx + dy*dy;
+        if (d2 < best) { best = d2; bestDot = { i, game: p.x, px, py, y: p.y }; }
+      });
+    });
+    const within = bestDot && Math.sqrt(best) <= 12;
+    if (within) {
+      window.__trendHover = { i: bestDot.i, game: bestDot.game };
+      window.__trendHighlight = null;
+      drawTrendChartFromGames({ games: window.__lastGames || [] });
+      const names = window.__trendNames || [];
+      tip.innerHTML = `<div style="font-weight:600;margin-bottom:4px;">Game ${bestDot.game}</div>` +
+        `<div><span style="display:inline-block;width:10px;height:3px;background:${TREND_COLORS[bestDot.i%TREND_COLORS.length]};margin-right:6px;"></span>` +
+        `${names[bestDot.i] || ('Seat ' + bestDot.i)}: ${bestDot.y.toFixed(1)}pt</div>`;
+      tip.style.display = 'block';
+      const w = tip.offsetWidth || 160;
+      const tx = Math.min(Math.max(geom.margin.left, x + 12), geom.W - w - 8);
+      const ty = Math.max(geom.margin.top + 8, Math.min(bestDot.py - 28, geom.H - geom.margin.bottom - 8));
+      tip.style.left = tx + 'px'; tip.style.top = ty + 'px';
+      return;
+    }
+
+    // 最近傍のゲーム（X）をフォールバック
+    let nearest = games[0]; let bestX = Infinity;
+    games.forEach(g => { const dx = Math.abs(X(g) - x); if (dx < bestX) { bestX = dx; nearest = g; } });
+    window.__trendHighlight = nearest; window.__trendHover = null;
+    drawTrendChartFromGames({ games: window.__lastGames || [] });
+
+    if (!tip) return;
+    const names = window.__trendNames || [];
+    const at = (arr, gameNo) => arr.find(p => p.x === nearest)?.y ?? 0;
+    const lines = [0,1,2,3].map(i => {
+      const vy = at(window.__trendSeries[i] || [], nearest);
+      const sw = `<span style="display:inline-block;width:10px;height:3px;background:${TREND_COLORS[i%TREND_COLORS.length]};margin-right:6px;"></span>`;
+      return `${sw}${names[i] || ('Seat ' + i)}: ${vy.toFixed(1)}pt`;
+    });
+    tip.innerHTML = `<div style="font-weight:600;margin-bottom:4px;">Game ${nearest}</div>${lines.map(l=>`<div>${l}</div>`).join('')}`;
+    tip.style.display = 'block';
+    const w2 = tip.offsetWidth || 160;
+    const tx2 = Math.min(Math.max(geom.margin.left, x + 12), geom.W - w2 - 8);
+    const ty2 = geom.margin.top + 8;
+    tip.style.left = tx2 + 'px'; tip.style.top = ty2 + 'px';
+  };
+  const onLeave = () => { window.__trendHighlight = null; window.__trendHover = null; if (tip) tip.style.display = 'none'; drawTrendChartFromGames({ games: window.__lastGames || [] }); };
+  canvas.addEventListener('mousemove', onMove);
+  canvas.addEventListener('touchstart', onMove, { passive: true });
+  canvas.addEventListener('touchmove', onMove, { passive: true });
+  canvas.addEventListener('mouseleave', onLeave);
+  canvas.addEventListener('touchend', onLeave);
+  canvas.__trendBound = true;
 }
 
 // ------- submit edited game (stub) -------
