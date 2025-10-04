@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>対局管理</title>
+  <title>点数計算アプリエグチマン</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="styles.css" />
   <script defer src="app.js"></script>
@@ -12,7 +12,7 @@
     <div class="header-inner">
       <a class="brand" id="brandHome" href="#/" aria-label="一覧へ戻る">
         <div class="brand-badge"></div>
-        <div class="brand-title">対局管理</div>
+        <div class="brand-title"><span class="brand-line1">点数計算アプリ</span><span class="brand-line2">エグチマン</span></div>
       </a>
       <div class="toolbar">
         <button id="openCreateModalBtn" class="btn btn-primary" aria-haspopup="dialog" aria-controls="createModal">対局作成</button>
@@ -43,7 +43,7 @@
         <div id="errorBox" class="error" style="margin-top:8px;"></div>
         <div class="grid grid-2" style="margin-top:8px;">
           <div class="field"><label>タイトル</label>
-            <input class="input" id="title" type="text" placeholder="eguchiman" />
+            <input class="input" id="title" type="text" placeholder="エグチマン麻雀0101" />
           </div>
           <div class="field"><label>オカ（oka_points）</label>
             <select class="select" id="oka_select">
@@ -114,25 +114,25 @@
               <div class="field">
                 <label>東家</label>
                 <select class="select" id="seat0name"></select>
-                <input class="input" id="seat0" type="number" placeholder="スコア（例: 25000）" />
+                <input class="input score-input" id="seat0" type="text" inputmode="numeric" pattern="[0-9\-]*" placeholder="25000" />
               </div>
               <div class="field">
                 <label>南家</label>
                 <select class="select" id="seat1name"></select>
-                <input class="input" id="seat1" type="number" placeholder="スコア" />
+                <input class="input score-input" id="seat1" type="text" inputmode="numeric" pattern="[0-9\-]*" placeholder="25000" />
               </div>
               <div class="field">
                 <label>西家</label>
                 <select class="select" id="seat2name"></select>
-                <input class="input" id="seat2" type="number" placeholder="スコア" />
+                <input class="input score-input" id="seat2" type="text" inputmode="numeric" pattern="[0-9\-]*" placeholder="25000" />
               </div>
               <div class="field">
                 <label>北家</label>
                 <select class="select" id="seat3name"></select>
-                <input class="input" id="seat3" type="number" placeholder="スコア" />
+                <input class="input score-input" id="seat3" type="text" inputmode="numeric" pattern="[0-9\-]*" placeholder="25000" />
               </div>
             </div>
-            <div style="margin-top:12px;">
+            <div style="margin-top:12px; display:flex; align-items:center; justify-content:flex-end; gap:12px;">
               <button class="btn btn-primary" id="saveGameBtn">登録</button>
             </div>
             </div>

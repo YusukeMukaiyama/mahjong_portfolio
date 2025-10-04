@@ -1,9 +1,9 @@
--- Seed match data (no schema changes)
--- This resets matches/participants/games/game_scores and inserts demo data.
+-- Seed match data (fresh load; no schema changes)
+-- This wipes ALL existing match-related data and inserts demo data.
 
 begin;
 
--- Reset only gameplay data
+-- Reset all match-related data (order doesn't matter with CASCADE)
 truncate table public.game_scores restart identity cascade;
 truncate table public.games restart identity cascade;
 truncate table public.participants restart identity cascade;

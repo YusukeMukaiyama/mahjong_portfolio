@@ -47,7 +47,7 @@ function translateValidationMessage(msg) {
     { k: "raw_score must be multiple of 100", v: "各スコアは100点単位で入力してください。" },
     { k: "each seat_index must appear once", v: "4人分それぞれ1回ずつ入力してください。" },
     { k: "scores must include seat_index 0..3", v: "4人分のスコアをすべて入力してください。" },
-    { k: "sum must be 100000", v: "合計は100000点にしてください。入力値を確認してください。" },
+    { k: "sum must be 100000", v: "合計は100000点です。入力値を確認してください。" },
     { k: "not found", v: "対局が見つかりません。" },
     { k: "oka_points / uma_low / uma_high は整数で入力してください", v: "オカ・ウマは整数で入力してください。" },
     { k: "ウマは自然数で入力してください", v: "ウマは自然数（例: 5-10 のように）で入力してください。" },
@@ -294,10 +294,77 @@ function renderDetail(m) {
   });
   ["seat0","seat1","seat2","seat3"].forEach((id) => { if ($(id) && !$(id).value) $(id).value = "25000"; });
 
+  // 座席名セレクトの一意制約とオートフィル（北家残り1名の自動入力）
+  bindSeatNameUniqueHandlers();
+  enforceUniqueSeatNames();
+
   renderTotals(m);
   renderGames(m);
   drawTrendChartFromGames(m);
 }
+
+// 4つのセレクトで同一名が重複しないように、他の席で選択済みの名前を選択不能にする
+function enforceUniqueSeatNames() {
+  const sels = ["seat0name","seat1name","seat2name","seat3name"].map(id => $(id)).filter(Boolean);
+  if (sels.length !== 4) return;
+  const allNames = (currentParticipants || []).map(p => p.name);
+
+  // 現在の選択を取得
+  let s0 = sels[0].value; // 東家: 制約なし（全員から選択可）
+  let s1 = sels[1].value; // 南家: 東家で選ばれた人以外
+  let s2 = sels[2].value; // 西家: 東家/南家で選ばれた人以外
+
+  // 南家の許容候補: 東家の選択以外
+  const allow1 = allNames.filter(n => n !== s0);
+  if (!allow1.includes(s1) && allow1.length) {
+    s1 = allow1[0];
+    sels[1].value = s1;
+  }
+
+  // 西家の許容候補: 東家/南家の選択以外
+  const allow2 = allNames.filter(n => n !== s0 && n !== s1);
+  if (!allow2.includes(s2) && allow2.length) {
+    s2 = allow2[0];
+    sels[2].value = s2;
+  }
+
+  // 北家の自動確定: 残り1名なら自動設定
+  const remain = allNames.filter(n => n !== s0 && n !== s1 && n !== s2);
+  if (remain.length === 1) {
+    sels[3].value = remain[0];
+  }
+
+  // option の活性/非活性設定
+  // 東家: 全員選択可能
+  Array.from(sels[0].options).forEach(opt => { opt.disabled = false; });
+  // 南家: 東家選択者のみ非活性（ただし自身の選択は残す）
+  Array.from(sels[1].options).forEach(opt => {
+    opt.disabled = (opt.value === s0) && (opt.value !== s1);
+  });
+  // 西家: 東家/南家の選択者を非活性（ただし自身の選択は残す）
+  Array.from(sels[2].options).forEach(opt => {
+    const dis = (opt.value === s0 || opt.value === s1) && (opt.value !== s2);
+    opt.disabled = dis;
+  });
+  // 北家: 残り1名が決まっていれば他は非活性
+  if (remain.length === 1) {
+    Array.from(sels[3].options).forEach(opt => { opt.disabled = (opt.value !== remain[0]); });
+  } else {
+    Array.from(sels[3].options).forEach(opt => { opt.disabled = false; });
+  }
+}
+
+function bindSeatNameUniqueHandlers() {
+  const ids = ["seat0name","seat1name","seat2name","seat3name"];
+  ids.forEach(id => {
+    const sel = $(id);
+    if (!sel || sel.__uniqueBound) return;
+    sel.addEventListener('change', () => enforceUniqueSeatNames());
+    sel.__uniqueBound = true;
+  });
+}
+
+// ライブ差分表示は不要（登録時のみメッセージに差分を表示）
 
 // localStorage にゲームごとの「入力名（E/S/W/N）」を保存しておく（DBは触らない）
 function savePendingNames(matchId, namesBySeat) {
@@ -374,10 +441,10 @@ function renderGames(m) {
     const tdName = document.createElement("td"); tdName.textContent = savedNames[r.seat_index] || fallbackNames[r.seat_index];
     const tdScore = document.createElement("td");
     const inp = document.createElement("input");
-    inp.type = "number"; inp.step = "100"; inp.value = String(r.raw_score); inp.id = `editScore-${r.seat_index}`;
+    inp.type = "text"; inp.setAttribute('inputmode','numeric'); inp.setAttribute('pattern','[0-9\\-]*'); inp.className = 'score-input';
+    inp.value = String(r.raw_score); inp.id = `editScore-${r.seat_index}`;
     tdScore.appendChild(inp);
     const tdTotal = document.createElement("td"); tdTotal.textContent = r.pt_total.toFixed(1);
-    tdTotal.classList.add('score');
     tr.appendChild(tdRank); tr.appendChild(tdName); tr.appendChild(tdScore); tr.appendChild(tdTotal);
     tbody.appendChild(tr);
 
@@ -393,11 +460,11 @@ function renderGames(m) {
       const nameEl = document.createElement("span"); nameEl.className = "name"; nameEl.textContent = savedNames[r.seat_index] || fallbackNames[r.seat_index];
       left.appendChild(rankBadge); left.appendChild(nameEl);
       const totalEl = document.createElement("div"); totalEl.textContent = r.pt_total.toFixed(1) + "pt";
-      totalEl.className = (r.pt_total > 0 ? "pos" : (r.pt_total < 0 ? "neg" : "")) + " score";
+      totalEl.className = (r.pt_total > 0 ? "pos" : (r.pt_total < 0 ? "neg" : ""));
       rowTop.appendChild(left); rowTop.appendChild(totalEl);
 
       const rowBottom = document.createElement("div");
-      const inp2 = document.createElement("input"); inp2.type = "number"; inp2.step = "100"; inp2.value = String(r.raw_score); inp2.id = `editScoreCard-${r.seat_index}`;
+      const inp2 = document.createElement("input"); inp2.type = "text"; inp2.setAttribute('inputmode','numeric'); inp2.setAttribute('pattern','[0-9\\-]*'); inp2.className = 'score-input'; inp2.value = String(r.raw_score); inp2.id = `editScoreCard-${r.seat_index}`;
       inp2.style.width = "100%"; inp2.style.textAlign = "right";
       rowBottom.appendChild(inp2);
 
@@ -421,7 +488,12 @@ function saveEditedGame() {
   if (vals.some(v => !Number.isInteger(v))) { showScoreError("整数で入力してください"); return; }
   if (vals.some(v => v % 100 !== 0)) { showScoreError("raw_score は100点単位"); return; }
   const sum = vals.reduce((a,b)=>a+b,0);
-  if (sum !== 100000) { showScoreError("合計は100000点にしてください"); return; }
+  if (sum !== 100000) {
+    const delta = 100000 - sum; // >0: 不足, <0: 過剰
+    const msg = `${Math.abs(delta)}点${delta > 0 ? '不足' : '過剰'}`;
+    showScoreError(`現在合計: ${sum}点、${msg}`);
+    return;
+  }
   showToast(`Game ${currentActiveGameNumber} の点数を検証しました（保存API未実装）`);
 }
 
@@ -465,7 +537,12 @@ async function submitScores() {
   if (scores.some(v => !Number.isInteger(v))) { showScoreError("整数で入力してください"); return; }
   if (scores.some(v => v % 100 !== 0)) { showScoreError("raw_score は100点単位"); return; }
   const sum = scores.reduce((a,b)=>a+b,0);
-  if (sum !== 100000) { showScoreError("合計は100000点にしてください"); return; }
+  if (sum !== 100000) {
+    const delta = 100000 - sum; // >0: 不足, <0: 過剰
+    const msg = `${Math.abs(delta)}点${delta > 0 ? '不足' : '過剰'}`;
+    showScoreError(`現在合計: ${sum}点、${msg}`);
+    return;
+  }
 
   // 名前は同点用メモなので必須ではないが、空欄にはデフォルト名を入れておくと後で見やすい
   const defaults = [0,1,2,3].map(i => currentParticipants.find(p => p.seat_priority === i)?.name || `Seat ${i}`);
@@ -818,7 +895,12 @@ function saveEditedGame() {
   if (vals.some(v => !Number.isInteger(v))) { showScoreError("整数で入力してください"); return; }
   if (vals.some(v => v % 100 !== 0)) { showScoreError("raw_score は100点単位"); return; }
   const sum = vals.reduce((a,b)=>a+b,0);
-  if (sum !== 100000) { showScoreError("合計は100000点にしてください"); return; }
+  if (sum !== 100000) {
+    const delta = 100000 - sum; // >0: 不足, <0: 過剰
+    const msg = `${Math.abs(delta)}点${delta > 0 ? '不足' : '過剰'}`;
+    showScoreError(`現在合計: ${sum}点、${msg}`);
+    return;
+  }
   showToast(`Game ${currentActiveGameNumber} の点数を検証しました（保存API未実装）`);
 }
 

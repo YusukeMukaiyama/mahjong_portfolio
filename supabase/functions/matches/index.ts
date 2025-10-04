@@ -102,11 +102,12 @@ async function getMatchDetail(
 
   // cumulative scores (sum of pt_total by seat_index)
   const totals = [0, 0, 0, 0];
-  gameResults.forEach((gr) => {
+  gameResults.forEach((gr: any) => {
     (gr.results || []).forEach((r: GameResultRow) => {
       totals[r.seat_index] += r.pt_total;
     });
   });
+
 
   return jsonResponse({
     id: m.id,
@@ -314,14 +315,14 @@ Deno.serve(async (req) => {
       const participantsInput = Array.isArray(body.participants) ? body.participants : [];
 
       // Validate participants: exactly 4, non-empty, unique
-      const names = participantsInput.map((n) => (typeof n === "string" ? n.trim() : "")).filter((n) => n.length > 0);
+      const names = participantsInput.map((n: any) => (typeof n === "string" ? n.trim() : "")).filter((n: any) => n.length > 0);
       if (participantsInput.length !== 4) {
         return errorResponse("参加者は4人必要です (participants must have exactly 4 names)");
       }
       if (names.length !== 4) {
         return errorResponse("名前は空欄不可です (participant names must be non-empty)");
       }
-      const uniqueNames = new Set(names.map((n) => n.toLowerCase()));
+      const uniqueNames = new Set(names.map((n: any) => n.toLowerCase()));
       if (uniqueNames.size !== 4) {
         return errorResponse("名前は重複不可です (participant names must be unique)");
       }
@@ -368,7 +369,7 @@ Deno.serve(async (req) => {
 
       // Insert participants with seat_priority
       // Try without id first (works for bigint/bigserial or uuid default). If NOT NULL on id w/o default, retry with generated uuid text id.
-      const rowsNoId = names.map((name, idx) => ({ match_id: match.id, name, seat_priority: idx }));
+      const rowsNoId = names.map((name: any, idx: any) => ({ match_id: match.id, name, seat_priority: idx }));
       let pErr: any = null;
       {
         const res = await supabase.from("participants").insert(rowsNoId);
@@ -377,7 +378,7 @@ Deno.serve(async (req) => {
       if (pErr) {
         const needId = pErr.code === '23502' || /null value.*column\s+"?id"?/i.test(pErr.message || '');
         if (needId) {
-          const rowsWithId = names.map((name, idx) => ({ id: crypto.randomUUID(), match_id: match.id, name, seat_priority: idx }));
+          const rowsWithId = names.map((name: any, idx: any) => ({ id: crypto.randomUUID(), match_id: match.id, name, seat_priority: idx }));
           const res2 = await supabase.from("participants").insert(rowsWithId);
           pErr = res2.error;
         }
