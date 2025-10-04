@@ -260,9 +260,24 @@ function renderDetail(m) {
   $("detailOka").textContent = m.oka_points;
   $("detailUma").textContent = `${Math.abs(m.uma_low)} / ${Math.abs(m.uma_high)}`;
 
-  // 名前入力のデフォルト：対局作成時の座席順をヒントに埋める
+  // 名前入力：テキスト入力からプルダウンに変更
+  // 対局参加者（作成時の名前）を選択肢として表示し、席順デフォルトを選択状態にする
   const defaults = [0,1,2,3].map(i => currentParticipants.find(p => p.seat_priority === i)?.name || "");
-  ["seat0name","seat1name","seat2name","seat3name"].forEach((id, i) => { if ($(id) && !$(id).value) $(id).value = defaults[i]; });
+  const options = (currentParticipants || []).map(p => p.name);
+  ["seat0name","seat1name","seat2name","seat3name"].forEach((id, i) => {
+    const sel = $(id);
+    if (!sel) return;
+    // 再描画時も常に選択肢を作り直す
+    sel.innerHTML = "";
+    options.forEach((name) => {
+      const opt = document.createElement("option");
+      opt.value = name; opt.textContent = name;
+      sel.appendChild(opt);
+    });
+    // 席順のデフォルト名を優先して選択
+    const def = defaults[i];
+    if (def && options.includes(def)) sel.value = def;
+  });
   ["seat0","seat1","seat2","seat3"].forEach((id) => { if ($(id) && !$(id).value) $(id).value = "25000"; });
 
   renderTotals(m);
