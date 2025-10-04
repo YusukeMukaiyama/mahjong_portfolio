@@ -283,6 +283,10 @@ function renderDetail(m) {
     if (!sel) return;
     // 再描画時も常に選択肢を作り直す
     sel.innerHTML = "";
+    // プレースホルダー（手動でクリアできるよう有効のまま）
+    const ph = document.createElement("option");
+    ph.value = ""; ph.textContent = "選択";
+    sel.appendChild(ph);
     options.forEach((name) => {
       const opt = document.createElement("option");
       opt.value = name; opt.textContent = name;
@@ -313,19 +317,24 @@ function enforceUniqueSeatNames() {
   let s0 = sels[0].value; // 東家: 制約なし（全員から選択可）
   let s1 = sels[1].value; // 南家: 東家で選ばれた人以外
   let s2 = sels[2].value; // 西家: 東家/南家で選ばれた人以外
+  const skipAuto = !!window.__skipAutoAssignSeatNames;
 
   // 南家の許容候補: 東家の選択以外
   const allow1 = allNames.filter(n => n !== s0);
-  if (!allow1.includes(s1) && allow1.length) {
-    s1 = allow1[0];
-    sels[1].value = s1;
+  if (!skipAuto) {
+    if (!allow1.includes(s1) && allow1.length) {
+      s1 = allow1[0];
+      sels[1].value = s1;
+    }
   }
 
   // 西家の許容候補: 東家/南家の選択以外
   const allow2 = allNames.filter(n => n !== s0 && n !== s1);
-  if (!allow2.includes(s2) && allow2.length) {
-    s2 = allow2[0];
-    sels[2].value = s2;
+  if (!skipAuto) {
+    if (!allow2.includes(s2) && allow2.length) {
+      s2 = allow2[0];
+      sels[2].value = s2;
+    }
   }
 
   // 北家の自動確定: 残り1名なら自動設定
@@ -362,6 +371,18 @@ function bindSeatNameUniqueHandlers() {
     sel.addEventListener('change', () => enforceUniqueSeatNames());
     sel.__uniqueBound = true;
   });
+}
+
+// 登録成功時に、名前セレクトと点数入力をプレースホルダー表示（空）に戻す
+function resetEntryFieldsToPlaceholders() {
+  try {
+    window.__skipAutoAssignSeatNames = true;
+    ["seat0name","seat1name","seat2name","seat3name"].forEach(id => { const el = $(id); if (el) el.value = ""; });
+    ["seat0","seat1","seat2","seat3"].forEach(id => { const el = $(id); if (el) el.value = ""; });
+    enforceUniqueSeatNames();
+  } finally {
+    window.__skipAutoAssignSeatNames = false;
+  }
 }
 
 // ライブ差分表示は不要（登録時のみメッセージに差分を表示）
@@ -580,6 +601,8 @@ async function submitScores() {
     }
 
     renderDetail(data);
+    // 次回入力に向けてプレースホルダーへリセット
+    resetEntryFieldsToPlaceholders();
     setBusy(btn, false);
     showToast("ゲームを登録しました");
   } catch {

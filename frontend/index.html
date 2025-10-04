@@ -45,9 +45,9 @@
           <div class="field"><label>タイトル</label>
             <input class="input" id="title" type="text" placeholder="エグチマン麻雀0101" />
           </div>
-          <div class="field"><label>オカ（oka_points）</label>
+          <div class="field"><label>オカ（終点基準）</label>
             <select class="select" id="oka_select">
-              <option value="30000" selected>30000（デフォルト）</option>
+              <option value="30000" selected>30000</option>
               <option value="25000">25000</option>
               <option value="35000">35000</option>
               <option value="custom">カスタム</option>
@@ -59,8 +59,8 @@
           </div>
           <div class="field"><label>ウマ（順位点）</label>
             <select class="select" id="uma_select">
-              <option value="5-15" selected>5-15（デフォルト）</option>
-              <option value="5-10">5-10</option>
+              <option value="5-10" selected>5-10</option>
+              <option value="5-15">5-15</option>
               <option value="10-20">10-20</option>
               <option value="10-30">10-30</option>
               <option value="custom">カスタム</option>
@@ -100,7 +100,7 @@
 
         <div id="detailError" class="error" style="margin-top:10px;"></div>
         <div class="kpi" style="margin-top:10px;">
-          <span class="pill">起点: <strong id="detailStart"></strong></span>
+          <span class="pill">開始点: <strong id="detailStart"></strong></span>
           <span class="pill">オカ: <strong id="detailOka"></strong></span>
           <span class="pill">ウマ: <strong id="detailUma"></strong></span>
         </div>
@@ -114,22 +114,22 @@
               <div class="field">
                 <label>東家</label>
                 <select class="select" id="seat0name"></select>
-                <input class="input score-input" id="seat0" type="text" inputmode="numeric" pattern="[0-9\-]*" placeholder="25000" />
+                <input class="input score-input" id="seat0" type="text" inputmode="tel" pattern="[0-9\-]*" placeholder="25000" />
               </div>
               <div class="field">
                 <label>南家</label>
                 <select class="select" id="seat1name"></select>
-                <input class="input score-input" id="seat1" type="text" inputmode="numeric" pattern="[0-9\-]*" placeholder="25000" />
+                <input class="input score-input" id="seat1" type="text" inputmode="tel" pattern="[0-9\-]*" placeholder="25000" />
               </div>
               <div class="field">
                 <label>西家</label>
                 <select class="select" id="seat2name"></select>
-                <input class="input score-input" id="seat2" type="text" inputmode="numeric" pattern="[0-9\-]*" placeholder="25000" />
+                <input class="input score-input" id="seat2" type="text" inputmode="tel" pattern="[0-9\-]*" placeholder="25000" />
               </div>
               <div class="field">
                 <label>北家</label>
                 <select class="select" id="seat3name"></select>
-                <input class="input score-input" id="seat3" type="text" inputmode="numeric" pattern="[0-9\-]*" placeholder="25000" />
+                <input class="input score-input" id="seat3" type="text" inputmode="tel" pattern="[0-9\-]*" placeholder="25000" />
               </div>
             </div>
             <div style="margin-top:12px; display:flex; align-items:center; justify-content:flex-end; gap:12px;">
