@@ -611,6 +611,68 @@ function drawTrendChartFromGames(m) {
     ctx.restore();
   }
 
+  // 吹き出し: アクティブな点にキャンバス内で表示
+  if (hoverDot) {
+    const i = hoverDot.i;
+    const pts = series[i] || [];
+    const p = pts.find(pp => pp.x === hoverDot.game);
+    if (p) {
+      const px = X(p.x), py = Y(p.y);
+      const name = namesBySeat[i] || ("Seat " + i);
+      const text = `${name}: ${p.y.toFixed(1)}pt`;
+
+      const isLight = document.body.classList.contains('theme-light');
+      const bg = isLight ? 'rgba(255,255,255,0.95)' : 'rgba(17,24,39,0.92)';
+      const fg = isLight ? '#0b1220' : '#e6edf3';
+      const bd = isLight ? 'rgba(10,20,30,0.18)' : 'rgba(255,255,255,0.10)';
+
+      const padX = 8, padY = 6, corner = 6, arrowW = 10, arrowH = 8, gap = 8;
+      const metrics = ctx.measureText(text);
+      let w = Math.ceil(metrics.width) + padX * 2; if (w < 80) w = 80;
+      const h = 14 + padY * 2; // 12pxフォント基準
+
+      let x0 = Math.round(px - w / 2);
+      let y0 = Math.round(py - h - arrowH - gap);
+      let above = true;
+      if (x0 < margin.left) x0 = margin.left;
+      if (x0 + w > W - margin.right) x0 = W - margin.right - w;
+      if (y0 < margin.top) { y0 = Math.round(py + arrowH + gap); above = false; if (y0 + h > H - margin.bottom) y0 = H - margin.bottom - h; }
+
+      ctx.save();
+      ctx.shadowColor = isLight ? 'rgba(0,0,0,0.08)' : 'rgba(0,0,0,0.35)';
+      ctx.shadowBlur = 8; ctx.shadowOffsetY = 2;
+
+      // 角丸矩形
+      ctx.beginPath();
+      const x1 = x0, y1 = y0, x2 = x0 + w, y2 = y0 + h, r = corner;
+      ctx.moveTo(x1 + r, y1);
+      ctx.arcTo(x2, y1, x2, y2, r);
+      ctx.arcTo(x2, y2, x1, y2, r);
+      ctx.arcTo(x1, y2, x1, y1, r);
+      ctx.arcTo(x1, y1, x2, y1, r);
+      // 矢印
+      const tipX = Math.max(x1 + r + 8, Math.min(px, x2 - r - 8));
+      if (above) {
+        ctx.moveTo(tipX - arrowW/2, y2);
+        ctx.lineTo(px, py + 1);
+        ctx.lineTo(tipX + arrowW/2, y2);
+      } else {
+        ctx.moveTo(tipX - arrowW/2, y1);
+        ctx.lineTo(px, py - 1);
+        ctx.lineTo(tipX + arrowW/2, y1);
+      }
+      ctx.closePath();
+
+      ctx.fillStyle = bg; ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.strokeStyle = bd; ctx.lineWidth = 1; ctx.stroke();
+
+      ctx.fillStyle = fg; ctx.textBaseline = 'alphabetic';
+      ctx.fillText(text, x0 + padX, y0 + padY + 12);
+      ctx.restore();
+    }
+  }
+
   // 凡例
   const legend = $("trendLegend");
   if (legend) {
@@ -678,8 +740,10 @@ function bindTrendPointerOnce(canvas) {
     const within = bestDot && Math.sqrt(best) <= 12;
     if (within) {
       window.__trendHover = { i: bestDot.i, game: bestDot.game };
-      window.__trendHighlight = null;
+      window.__trendHighlight = bestDot.game;
       drawTrendChartFromGames({ games: window.__lastGames || [] });
+      if (tip) tip.style.display = 'none';
+      return;
       const names = window.__trendNames || [];
       tip.innerHTML = `<div style="font-weight:600;margin-bottom:4px;">Game ${bestDot.game}</div>` +
         `<div><span style="display:inline-block;width:10px;height:3px;background:${TREND_COLORS[bestDot.i%TREND_COLORS.length]};margin-right:6px;"></span>` +
@@ -697,6 +761,8 @@ function bindTrendPointerOnce(canvas) {
     games.forEach(g => { const dx = Math.abs(X(g) - x); if (dx < bestX) { bestX = dx; nearest = g; } });
     window.__trendHighlight = nearest; window.__trendHover = null;
     drawTrendChartFromGames({ games: window.__lastGames || [] });
+    if (tip) tip.style.display = 'none';
+    return;
 
     if (!tip) return;
     const names = window.__trendNames || [];
