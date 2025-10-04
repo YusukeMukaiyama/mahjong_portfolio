@@ -15,17 +15,33 @@
         <div class="brand-title">対局管理</div>
       </div>
       <div class="toolbar">
+        <button id="openCreateModalBtn" class="btn btn-primary" aria-haspopup="dialog" aria-controls="createModal">対局作成</button>
         <button id="themeToggle" class="btn btn-ghost" aria-label="テーマ切替">🌓</button>
       </div>
     </div>
   </header>
 
   <main class="container">
-    <section id="homeView" class="section">
+    <section id="homeView" class="section"></section>
+
+    <section id="listSection" class="section">
       <div class="card">
-        <h2 class="title">対局作成</h2>
-        <div id="errorBox" class="error"></div>
-        <div class="grid grid-2">
+        <h2 class="title">対局一覧</h2>
+        <div id="matchesList" class="cards-grid"></div>
+      </div>
+    </section>
+    <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+    <!-- Create Match Modal -->
+    <div id="createModalOverlay" class="modal-overlay hidden" aria-hidden="true"></div>
+    <div id="createModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="createModalTitle">
+      <div class="card" style="max-width: 720px; margin: 12vh auto;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+          <h2 id="createModalTitle" class="title" style="margin:0;">対局作成</h2>
+          <button id="createModalCloseBtn" class="btn" aria-label="閉じる">✕</button>
+        </div>
+        <div id="errorBox" class="error" style="margin-top:8px;"></div>
+        <div class="grid grid-2" style="margin-top:8px;">
           <div class="field"><label>タイトル</label>
             <input class="input" id="title" type="text" placeholder="eguchiman" />
           </div>
@@ -63,19 +79,12 @@
           <div class="field"><label>参加者4</label><input class="input" id="p4" type="text" placeholder="名前4" /></div>
         </div>
 
-        <div style="margin-top:14px; display:flex; gap:10px;">
+        <div style="margin-top:14px; display:flex; gap:10px; justify-content:flex-end;">
+          <button class="btn" id="createModalCancelBtn">キャンセル</button>
           <button class="btn btn-primary" id="createBtn">作成</button>
         </div>
       </div>
-    </section>
-
-    <section id="listSection" class="section">
-      <div class="card">
-        <h2 class="title">対局一覧</h2>
-        <div id="matchesList" class="cards-grid"></div>
-      </div>
-    </section>
-    <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+    </div>
 
     <section id="detailView" class="section hidden">
       <div class="card">

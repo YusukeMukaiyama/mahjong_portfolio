@@ -147,9 +147,15 @@ async function createMatch() {
     ["title","p1","p2","p3","p4"].forEach((id) => ($(id).value = ""));
     $("oka_select").value = "30000"; $("oka_custom").value = ""; $("oka_custom_wrap").style.display = "none";
     $("uma_select").value = "5-15"; $("uma_custom").value = ""; $("uma_custom_wrap").style.display = "none";
-    await loadMatches();
+    // モーダルを閉じて詳細へ遷移
+    try { window.closeCreateModal && window.closeCreateModal(); } catch {}
     setBusy(btn, false);
-    showToast("対局を作成しました");
+    if (data && data.id) {
+      go(`/matches/${encodeURIComponent(data.id)}`);
+    } else {
+      showToast("対局を作成しました");
+      await loadMatches();
+    }
   } catch {
     showError("通信に失敗しました。ネットワークをご確認の上、再度お試しください。");
   }
@@ -818,6 +824,26 @@ function saveEditedGame() {
 // ------- events -------
 window.addEventListener("DOMContentLoaded", () => {
   $("createBtn").addEventListener("click", createMatch);
+  // Create modal open/close handlers
+  const overlay = $("createModalOverlay");
+  const modal = $("createModal");
+  function openCreateModal() {
+    if (!overlay || !modal) return;
+    overlay.classList.remove("hidden");
+    modal.classList.remove("hidden");
+    $("title")?.focus();
+  }
+  function closeCreateModal() {
+    if (!overlay || !modal) return;
+    overlay.classList.add("hidden");
+    modal.classList.add("hidden");
+  }
+  window.closeCreateModal = closeCreateModal;
+  $("openCreateModalBtn")?.addEventListener("click", openCreateModal);
+  $("createModalCloseBtn")?.addEventListener("click", closeCreateModal);
+  $("createModalCancelBtn")?.addEventListener("click", closeCreateModal);
+  overlay?.addEventListener("click", closeCreateModal);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeCreateModal(); });
   $("backBtn").addEventListener("click", (e) => { e.preventDefault(); go("/"); });
   window.addEventListener("popstate", route);
   window.addEventListener("hashchange", route);
