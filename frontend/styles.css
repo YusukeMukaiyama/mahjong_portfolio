@@ -341,6 +341,13 @@ canvas { max-width: 100%; display: block; }
 
 /* Small footer spacing */
 .footer-space { height: 60px; }
+.home-footer {
+  width: 100%;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 12px 8px 0;
+}
 
 /* Matches list as cards */
 .cards-grid {

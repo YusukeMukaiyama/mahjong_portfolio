@@ -7,8 +7,53 @@ const isLocal = isLocalHostname || isLanIp;
 const API_BASE = isLocal
   ? `http://127.0.0.1:54321/functions/v1/${FUNCTION_NAME}`
   : `https://${PROJECT_REF}.functions.supabase.co/${FUNCTION_NAME}`;
+const UPDATE_REPO_OWNER = "YusukeMukaiyama";
+const UPDATE_REPO_NAME = "mahjong_portfolio";
 
 const $ = (id) => document.getElementById(id);
+let latestUpdateDateLabel = null;
+let latestUpdateLoading = false;
+
+function formatIsoToYmd(isoString) {
+  const d = new Date(isoString);
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function setHomeFooterText(label) {
+  const textEl = $("homeFooterText");
+  if (!textEl) return;
+  textEl.textContent = `最終アップデート日付：${label}`;
+}
+
+function setHomeFooterVisible(visible) {
+  const footer = $("homeFooter");
+  if (!footer) return;
+  footer.classList.toggle("hidden", !visible);
+}
+
+async function ensureLatestUpdateDate() {
+  if (latestUpdateDateLabel) return;
+  if (latestUpdateLoading) return;
+  latestUpdateLoading = true;
+  try {
+    const url = `https://api.github.com/repos/${UPDATE_REPO_OWNER}/${UPDATE_REPO_NAME}`;
+    const res = await fetch(url, { headers: { "Accept": "application/vnd.github+json" } });
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const data = await res.json();
+    const iso = data && typeof data.pushed_at === "string" ? data.pushed_at : null;
+    const ymd = iso ? formatIsoToYmd(iso) : null;
+    latestUpdateDateLabel = ymd || "不明";
+  } catch {
+    latestUpdateDateLabel = "不明";
+  } finally {
+    latestUpdateLoading = false;
+    setHomeFooterText(latestUpdateDateLabel || "不明");
+  }
+}
 
 function getHistoryRowDisplayName(row, participantNameById, fallbackNames) {
   if (typeof resolveHistoryRowName === "function") {
@@ -123,11 +168,19 @@ function route() {
     $("homeView").classList.add("hidden");
     $("listSection")?.classList.add("hidden");
     $("detailView").classList.remove("hidden");
+    setHomeFooterVisible(false);
     loadMatchDetail(info.matchId);
   } else {
     $("detailView").classList.add("hidden");
     $("homeView").classList.remove("hidden");
     $("listSection")?.classList.remove("hidden");
+    setHomeFooterVisible(true);
+    if (!latestUpdateDateLabel) {
+      setHomeFooterText("取得中...");
+      void ensureLatestUpdateDate();
+    } else {
+      setHomeFooterText(latestUpdateDateLabel);
+    }
     loadMatches();
   }
 }
