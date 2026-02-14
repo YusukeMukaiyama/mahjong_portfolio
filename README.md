@@ -13,7 +13,7 @@
 - 集計ロジックの二重化（`participant_id` 優先、欠損時は席順でフォールバック集計）
 
 ## 技術スタック
-- Frontend: HTML / CSS / Vanilla JavaScript
+- Frontend: HTML / CSS / Vanilla TypeScript（ビルド後に JavaScript を配信）
 - Backend: Supabase Edge Functions (Deno / TypeScript)
 - DB: Supabase Postgres
 - Infra: Supabase / Static Hosting
@@ -42,6 +42,9 @@
 ## セットアップ
 
 ```bash
+# フロントTSをJSへ変換
+make build-frontend-ts
+
 # Supabase 起動
 supabase start
 
