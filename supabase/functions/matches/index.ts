@@ -1,6 +1,8 @@
 // supabase/functions/matches/index.ts
 import { createClient } from "https://esm.sh/@supabase/supabase-js";
 import { computeGameResults, validateScores, type ScoreInput, type GameResultRow } from "./domain.ts";
+import { cleanupCreateGameFailure } from "./cleanup.ts";
+import { mapCreateGameInsertError, parseMatchesPath, resolveMatchRoute } from "./utils.ts";
 
 type MatchRow = {
   id: string;
@@ -16,7 +18,7 @@ type MatchRow = {
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS",
   "Content-Type": "application/json",
 };
 
@@ -205,17 +207,15 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceKey);
   const url = new URL(req.url);
   const pathname = url.pathname;
-  const parts = pathname.split("/");
-  const idx = parts.findIndex((p) => p === "matches");
-  const idFromPath = idx >= 0 && parts.length > idx + 1 && parts[idx + 1] ? decodeURIComponent(parts[idx + 1]) : null;
-  const subPath = idx >= 0 && parts.length > idx + 2 ? parts[idx + 2] : null;
+  const { matchId: idFromPath, gameNumberSeg } = parseMatchesPath(pathname);
+  const routeKind = resolveMatchRoute(req.method, pathname);
 
   try {
-    if (req.method === "GET" && idFromPath && !subPath) {
+    if (routeKind === "GET_DETAIL" && idFromPath) {
       return await getMatchDetail(supabase, idFromPath);
     }
 
-    if (req.method === "POST" && idFromPath && subPath === "games") {
+    if (routeKind === "POST_GAMES" && idFromPath) {
       // Create a game for the match
       let body: any;
       try {
@@ -283,13 +283,16 @@ Deno.serve(async (req) => {
 
       // Insert game and scores
       const { error: gErr } = await supabase.from("games").insert([{ match_id: matchPk, number: nextNumber }]);
-      if (gErr) return await logAndRespondError(null, 'POST /matches/:id/games', `Failed to create game: ${gErr.message}`, 500, matchPk);
+      if (gErr) {
+        const mapped = mapCreateGameInsertError(gErr);
+        if (mapped) return errorResponse(mapped.message, mapped.status);
+        return await logAndRespondError(null, 'POST /matches/:id/games', `Failed to create game: ${gErr.message}`, 500, matchPk);
+      }
 
       const rows = scoresInput.map((s) => ({ match_id: matchPk, game_number: nextNumber, seat_index: s.seat_index, raw_score: s.raw_score }));
       const { error: sErr } = await supabase.from("game_scores").insert(rows);
       if (sErr) {
-        // cleanup inserted game
-        await supabase.from("games").delete().eq("match_id", matchPk).eq("number", nextNumber);
+        await cleanupCreateGameFailure(supabase, "insert_scores", matchPk, nextNumber);
         return await logAndRespondError(null, 'POST /matches/:id/games', `Failed to insert scores: ${sErr.message}`, 500, matchPk, { scores: scoresInput, number: nextNumber });
       }
 
@@ -297,9 +300,7 @@ Deno.serve(async (req) => {
       const seatIns = seatRows.map(r => ({ match_id: matchPk, game_number: nextNumber, seat_index: r.seat_index, participant_id: r.participant_id, display_name: r.display_name }));
       const { error: seatInsErr } = await supabase.from("game_seats").insert(seatIns);
       if (seatInsErr) {
-        // cleanup both
-        await supabase.from("game_scores").delete().eq("match_id", matchPk).eq("game_number", nextNumber);
-        await supabase.from("games").delete().eq("match_id", matchPk).eq("number", nextNumber);
+        await cleanupCreateGameFailure(supabase, "insert_seats", matchPk, nextNumber);
         return await logAndRespondError(null, 'POST /matches/:id/games', `Failed to insert game_seats: ${seatInsErr.message}`, 500, matchPk, { players: playersInput, number: nextNumber });
       }
 
@@ -310,7 +311,57 @@ Deno.serve(async (req) => {
       return await getMatchDetail(supabase, String(matchPk));
     }
 
-    if (req.method === "GET") {
+    if (routeKind === "PATCH_GAME" && idFromPath && gameNumberSeg) {
+      const gameNumber = Number(gameNumberSeg);
+      if (!Number.isInteger(gameNumber) || gameNumber <= 0) {
+        return errorResponse("game number must be a positive integer", 422);
+      }
+
+      let body: any;
+      try {
+        body = await req.json();
+      } catch {
+        return errorResponse("Invalid JSON.", 400);
+      }
+
+      const scoresInput: ScoreInput[] = Array.isArray(body?.scores) ? body.scores : [];
+      const vErr = validateScores(scoresInput);
+      if (vErr) return await logAndRespondError(null, "PATCH /matches/:id/games/:number", vErr, 422, idFromPath, { game_number: gameNumber, scores: scoresInput });
+
+      const { data: m, error: mErr } = await supabase
+        .from("matches")
+        .select("id")
+        .eq("id", idFromPath)
+        .maybeSingle();
+      if (mErr) return await logAndRespondError(null, "PATCH /matches/:id/games/:number", `Failed to fetch match: ${mErr.message}`, 500, idFromPath);
+      if (!m) return await logAndRespondError(null, "PATCH /matches/:id/games/:number", "not found", 404, idFromPath);
+
+      const matchPk = m.id;
+      const { data: game, error: gErr } = await supabase
+        .from("games")
+        .select("number")
+        .eq("match_id", matchPk)
+        .eq("number", gameNumber)
+        .maybeSingle();
+      if (gErr) return await logAndRespondError(null, "PATCH /matches/:id/games/:number", `Failed to fetch game: ${gErr.message}`, 500, matchPk, { game_number: gameNumber });
+      if (!game) return await logAndRespondError(null, "PATCH /matches/:id/games/:number", "not found", 404, matchPk, { game_number: gameNumber });
+
+      const rows = scoresInput.map((s) => ({
+        match_id: matchPk,
+        game_number: gameNumber,
+        seat_index: s.seat_index,
+        raw_score: s.raw_score,
+      }));
+      const { error: upErr } = await supabase
+        .from("game_scores")
+        .upsert(rows, { onConflict: "match_id,game_number,seat_index" });
+      if (upErr) return await logAndRespondError(null, "PATCH /matches/:id/games/:number", `Failed to update scores: ${upErr.message}`, 500, matchPk, { game_number: gameNumber, scores: scoresInput });
+
+      await supabase.from("matches").update({ updated_at: new Date().toISOString() }).eq("id", matchPk);
+      return await getMatchDetail(supabase, String(matchPk));
+    }
+
+    if (routeKind === "GET_LIST") {
       const { data: matches, error } = await supabase
         .from("matches")
         .select("id, title, start_points, oka_points, uma_low, uma_high, updated_at")
@@ -373,7 +424,7 @@ Deno.serve(async (req) => {
       return jsonResponse(result);
     }
 
-    if (req.method === "POST") {
+    if (routeKind === "POST_MATCH") {
       let body: any;
       try {
         body = await req.json();
