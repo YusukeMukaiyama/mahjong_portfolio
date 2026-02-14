@@ -10,6 +10,25 @@ const API_BASE = isLocal
 
 const $ = (id) => document.getElementById(id);
 
+function getHistoryRowDisplayName(row, participantNameById, fallbackNames) {
+  if (typeof resolveHistoryRowName === "function") {
+    return resolveHistoryRowName(row, participantNameById, fallbackNames);
+  }
+  const pid = row?.participant_id != null ? String(row.participant_id) : "";
+  if (pid && participantNameById && typeof participantNameById.get === "function") {
+    const fromMap = participantNameById.get(pid);
+    if (typeof fromMap === "string" && fromMap.length) return fromMap;
+  }
+  const displayName = typeof row?.display_name === "string" ? row.display_name.trim() : "";
+  if (displayName) return displayName;
+  const seatIndex = Number(row?.seat_index);
+  if (Number.isInteger(seatIndex) && Array.isArray(fallbackNames) && seatIndex >= 0 && seatIndex < fallbackNames.length) {
+    const fb = fallbackNames[seatIndex];
+    if (typeof fb === "string" && fb.length) return fb;
+  }
+  return Number.isInteger(seatIndex) ? `Seat ${seatIndex}` : "Seat ?";
+}
+
 // ------- UI helpers -------
 function showToast(message, type = "success", timeout = 3000) {
   const container = $("toastContainer");
@@ -48,6 +67,8 @@ function translateValidationMessage(msg) {
     { k: "each seat_index must appear once", v: "4人分それぞれ1回ずつ入力してください。" },
     { k: "scores must include seat_index 0..3", v: "4人分のスコアをすべて入力してください。" },
     { k: "sum must be 100000", v: "合計は100000点です。入力値を確認してください。" },
+    { k: "game number must be a positive integer", v: "対象ゲーム番号が不正です。画面を再読み込みしてやり直してください。" },
+    { k: "同時更新が発生しました", v: "他のユーザー更新と競合しました。再読み込みしてもう一度お試しください。" },
     { k: "not found", v: "対局が見つかりません。" },
     { k: "oka_points / uma_low / uma_high は整数で入力してください", v: "オカ・ウマは整数で入力してください。" },
     { k: "ウマは自然数で入力してください", v: "ウマは自然数（例: 5-10 のように）で入力してください。" },
@@ -58,6 +79,7 @@ function translateValidationMessage(msg) {
 }
 function friendlyApiError(status, msg, fallback) {
   if (status === 404) return "対象のデータが見つかりません。やり直してください。";
+  if (status === 409) return translateValidationMessage(msg) || msg || "他のユーザー更新と競合しました。再読み込みしてお試しください。";
   if (status === 422 || status === 400) return translateValidationMessage(msg) || fallback;
   return "システムエラーが発生しました。時間を置いて再度お試しください。";
 }
@@ -89,15 +111,19 @@ function go(path) {
   }
 }
 function route() {
-  const hash = location.hash || "";
-  const path = hash.startsWith("#") && hash.length > 1 ? hash.slice(1) : location.pathname;
-  const m = path.match(/^\/matches\/([^/]+)$/);
-  if (m) {
-    const id = decodeURIComponent(m[1]);
+  const info = typeof resolveRouteView === "function"
+    ? resolveRouteView(location.hash || "", location.pathname)
+    : (() => {
+        const hash = location.hash || "";
+        const path = hash.startsWith("#") && hash.length > 1 ? hash.slice(1) : location.pathname;
+        const m = path.match(/^\/matches\/([^/]+)$/);
+        return m ? { view: "detail", matchId: decodeURIComponent(m[1]) } : { view: "home", matchId: null };
+      })();
+  if (info.view === "detail" && info.matchId) {
     $("homeView").classList.add("hidden");
     $("listSection")?.classList.add("hidden");
     $("detailView").classList.remove("hidden");
-    loadMatchDetail(id);
+    loadMatchDetail(info.matchId);
   } else {
     $("detailView").classList.add("hidden");
     $("homeView").classList.remove("hidden");
@@ -133,8 +159,8 @@ async function createMatch() {
   if (uma_low <= 0 || uma_high <= 0) { showError("ウマは自然数で入力してください（例: low=5, high=10）"); return; }
   if (uma_high < uma_low) { showError("ウマは high >= low となるように入力してください"); return; }
 
+  const btn = $("createBtn");
   try {
-    const btn = $("createBtn");
     setBusy(btn, true, "作成中...");
     const res = await fetch(API_BASE, {
       method: "POST",
@@ -142,14 +168,13 @@ async function createMatch() {
       body: JSON.stringify({ title: title || undefined, participants: names, oka_points, uma_low, uma_high }),
     });
     const data = await res.json();
-    if (!res.ok) { showError(friendlyApiError(res.status, data?.error, "作成に失敗しました")); setBusy(btn, false); return; }
+    if (!res.ok) { showError(friendlyApiError(res.status, data?.error, "作成に失敗しました")); return; }
 
     ["title","p1","p2","p3","p4"].forEach((id) => ($(id).value = ""));
     $("oka_select").value = "30000"; $("oka_custom").value = ""; $("oka_custom_wrap").style.display = "none";
     $("uma_select").value = "5-15"; $("uma_custom").value = ""; $("uma_custom_wrap").style.display = "none";
     // モーダルを閉じて詳細へ遷移
     try { window.closeCreateModal && window.closeCreateModal(); } catch {}
-    setBusy(btn, false);
     if (data && data.id) {
       go(`/matches/${encodeURIComponent(data.id)}`);
     } else {
@@ -158,6 +183,8 @@ async function createMatch() {
     }
   } catch {
     showError("通信に失敗しました。ネットワークをご確認の上、再度お試しください。");
+  } finally {
+    setBusy(btn, false);
   }
 }
 
@@ -248,7 +275,12 @@ async function loadMatchDetail(id) {
     const m = await res.json();
     if (!res.ok) {
       showDetailError(friendlyApiError(res.status, m?.error, `読み込みに失敗しました (${res.status})`));
-      $("detailGames").textContent = "";
+      const tabs = $("gameTabs");
+      const tbody = $("gameTableBody");
+      const cardList = $("gameCardList");
+      if (tabs) tabs.innerHTML = "";
+      if (tbody) tbody.innerHTML = "";
+      if (cardList) cardList.innerHTML = "";
       return;
     }
     renderDetail(m);
@@ -387,30 +419,6 @@ function resetEntryFieldsToPlaceholders() {
 
 // ライブ差分表示は不要（登録時のみメッセージに差分を表示）
 
-// localStorage にゲームごとの「入力名（E/S/W/N）」を保存しておく（DBは触らない）
-function savePendingNames(matchId, namesBySeat) {
-  try { localStorage.setItem(`pendingNames:${matchId}`, JSON.stringify(namesBySeat)); } catch {}
-}
-function commitNamesForLastGame(matchId, games) {
-  try {
-    const pen = localStorage.getItem(`pendingNames:${matchId}`);
-    if (!pen) return;
-    const names = JSON.parse(pen);
-    const maxNo = Math.max(...games.map(g => g.number));
-    localStorage.setItem(`gameNames:${matchId}:${maxNo}`, JSON.stringify(names));
-    localStorage.removeItem(`pendingNames:${matchId}`);
-  } catch {}
-}
-function getGameNames(matchId, gameNumber) {
-  try {
-    const raw = localStorage.getItem(`gameNames:${matchId}:${gameNumber}`);
-    if (!raw) return null;
-    const arr = JSON.parse(raw);
-    if (!Array.isArray(arr) || arr.length !== 4) return null;
-    return arr;
-  } catch { return null; }
-}
-
 function renderGames(m) {
   const holder = $("detailGames");
   let tabs = $("gameTabs");
@@ -419,6 +427,8 @@ function renderGames(m) {
 
   tabs.innerHTML = "";
   tbody.innerHTML = "";
+  const cardList = $("gameCardList");
+  if (cardList) cardList.innerHTML = "";
   const games = Array.isArray(m.games) ? m.games : [];
   if (!games.length) {
     const tr = document.createElement("tr");
@@ -448,18 +458,16 @@ function renderGames(m) {
   const g = gameByNo.get(currentActiveGameNumber);
   const rows = (g.results || []).slice().sort((a,b)=> a.seat_index - b.seat_index);
 
-  // 表示名は localStorage に保存されていればそれを使い、なければ参加者の席順名を使う
+  // 表示名は API の participant_id/display_name を優先して解決する
   const fallbackNames = [0,1,2,3].map(i => currentParticipants.find(p => p.seat_priority === i)?.name || `Seat ${i}`);
-  const savedNames = getGameNames(currentMatchId, g.number) || fallbackNames;
+  const participantNameById = new Map((currentParticipants || []).map((p) => [String(p.id), p.name]));
 
   // Mobile card list rendering
-  const cardList = $("gameCardList");
-  if (cardList) cardList.innerHTML = "";
-
   rows.forEach(r => {
+    const displayName = getHistoryRowDisplayName(r, participantNameById, fallbackNames);
     const tr = document.createElement("tr");
     const tdRank = document.createElement("td"); tdRank.textContent = String(r.rank);
-    const tdName = document.createElement("td"); tdName.textContent = savedNames[r.seat_index] || fallbackNames[r.seat_index];
+    const tdName = document.createElement("td"); tdName.textContent = displayName;
     const tdScore = document.createElement("td");
     const inp = document.createElement("input");
     inp.type = "text"; inp.setAttribute('inputmode','numeric'); inp.setAttribute('pattern','[0-9\\-]*'); inp.className = 'score-input';
@@ -478,7 +486,7 @@ function renderGames(m) {
       rowTop.className = "row";
       const left = document.createElement("div");
       const rankBadge = document.createElement("span"); rankBadge.className = "rank-badge"; rankBadge.textContent = String(r.rank);
-      const nameEl = document.createElement("span"); nameEl.className = "name"; nameEl.textContent = savedNames[r.seat_index] || fallbackNames[r.seat_index];
+      const nameEl = document.createElement("span"); nameEl.className = "name"; nameEl.textContent = displayName;
       left.appendChild(rankBadge); left.appendChild(nameEl);
       const totalEl = document.createElement("div"); totalEl.textContent = r.pt_total.toFixed(1) + "pt";
       totalEl.className = (r.pt_total > 0 ? "pos" : (r.pt_total < 0 ? "neg" : ""));
@@ -494,28 +502,6 @@ function renderGames(m) {
       cardList.appendChild(card);
     }
   });
-}
-
-function saveEditedGame() {
-  const errBox = $("detailScoreError");
-  if (errBox) { errBox.style.display = "none"; errBox.textContent = ""; }
-  if (!currentMatchId || currentActiveGameNumber == null) return;
-  const vals = [0,1,2,3].map(i => {
-    const card = document.getElementById(`editScoreCard-${i}`);
-    const table = document.getElementById(`editScore-${i}`);
-    const el = (card && card.offsetParent !== null) ? card : table;
-    return Number((el || {}).value);
-  });
-  if (vals.some(v => !Number.isInteger(v))) { showScoreError("整数で入力してください"); return; }
-  if (vals.some(v => v % 100 !== 0)) { showScoreError("raw_score は100点単位"); return; }
-  const sum = vals.reduce((a,b)=>a+b,0);
-  if (sum !== 100000) {
-    const delta = 100000 - sum; // >0: 不足, <0: 過剰
-    const msg = `${Math.abs(delta)}点${delta > 0 ? '不足' : '過剰'}`;
-    showScoreError(`現在合計: ${sum}点、${msg}`);
-    return;
-  }
-  showToast(`Game ${currentActiveGameNumber} の点数を検証しました（保存API未実装）`);
 }
 
 function renderTotals(m) {
@@ -590,23 +576,15 @@ async function submitScores() {
     return;
   }
 
-  // 名前は同点用メモなので必須ではないが、空欄にはデフォルト名を入れておくと後で見やすい
-  const defaults = [0,1,2,3].map(i => currentParticipants.find(p => p.seat_priority === i)?.name || `Seat ${i}`);
-  const namesForSave = namesBySeat.map((n, i) => n || defaults[i]);
-
   // 送信用（サーバは seat_index / raw_score のみを使用）
   const payload = {
     scores: [0,1,2,3].map(i => ({ seat_index: i, raw_score: scores[i] })),
     players
-    // namesForSave は送らない（DB保存不要のため）
   };
 
+  const btn = $("saveGameBtn");
   try {
-    const btn = $("saveGameBtn");
     setBusy(btn, true, "登録中...");
-
-    // いったんローカルに pending として保存（レス後にゲーム番号を確定してコミット）
-    savePendingNames(id, namesForSave);
 
     const res = await fetch(`${API_BASE}/${encodeURIComponent(id)}/games`, {
       method: "POST",
@@ -617,22 +595,17 @@ async function submitScores() {
 
     if (!res.ok) {
       showScoreError(friendlyApiError(res.status, data?.error, "登録できませんでした"));
-      setBusy(btn, false);
       return;
-    }
-
-    // 最新ゲーム番号に pending 名称を紐づけてローカル保存
-    if (Array.isArray(data?.games) && data.games.length) {
-      commitNamesForLastGame(id, data.games);
     }
 
     renderDetail(data);
     // 次回入力に向けてプレースホルダーへリセット
     resetEntryFieldsToPlaceholders();
-    setBusy(btn, false);
     showToast("ゲームを登録しました");
   } catch {
     showScoreError("通信に失敗しました。ネットワークをご確認の上、再度お試しください。");
+  } finally {
+    setBusy(btn, false);
   }
 }
 
@@ -1027,8 +1000,8 @@ function bindTrendPointerOnce(canvas) {
   canvas.__trendBound = true;
 }
 
-// ------- submit edited game (stub) -------
-function saveEditedGame() {
+// ------- submit edited game -------
+async function saveEditedGame() {
   const errBox = $("detailScoreError");
   if (errBox) { errBox.style.display = "none"; errBox.textContent = ""; }
   if (!currentMatchId || currentActiveGameNumber == null) return;
@@ -1047,7 +1020,28 @@ function saveEditedGame() {
     showScoreError(`現在合計: ${sum}点、${msg}`);
     return;
   }
-  showToast(`Game ${currentActiveGameNumber} の点数を検証しました（保存API未実装）`);
+
+  const btn = $("saveGameEditBtn");
+  try {
+    setBusy(btn, true, "保存中...");
+    const payload = { scores: [0,1,2,3].map((i) => ({ seat_index: i, raw_score: vals[i] })) };
+    const res = await fetch(`${API_BASE}/${encodeURIComponent(currentMatchId)}/games/${currentActiveGameNumber}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showScoreError(friendlyApiError(res.status, data?.error, "修正できませんでした"));
+      return;
+    }
+    renderDetail(data);
+    showToast(`Game ${currentActiveGameNumber} を修正しました`);
+  } catch {
+    showScoreError("通信に失敗しました。ネットワークをご確認の上、再度お試しください。");
+  } finally {
+    setBusy(btn, false);
+  }
 }
 
 // ------- events -------
